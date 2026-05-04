@@ -1,0 +1,29 @@
+[Unit]
+Description=Manga Image Translator Web Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/manga-translator
+EnvironmentFile=/root/manga-translator/.env
+Environment=MT_WEB_NONCE=None
+Environment=PORT=5003
+
+ExecStart=/root/manga-translator/venv/bin/python server/main.py --host 127.0.0.1 --port 5003 --start-instance --verbose
+
+Restart=always
+RestartSec=10
+TimeoutStartSec=300
+
+# CPU-only server
+Nice=10
+IOSchedulingClass=idle
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=manga-translator
+
+[Install]
+WantedBy=multi-user.target

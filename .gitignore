@@ -1,0 +1,31 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Output / temp
+output/
+result/
+input/
+gallery-dl/
+test_input.png
+
+# Config secrets
+.env
+config.json
+!config-example.json
+
+# Downloaded models
+models/
+
+# Fonts (user downloads separately)
+fonts/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
