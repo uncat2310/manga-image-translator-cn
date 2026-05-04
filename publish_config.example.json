@@ -1,0 +1,15 @@
+{
+  "_comment": "复制此文件为 publish_config.json，然后填入 catbox.userhash",
+  "mode": "local",
+  "catbox": {
+    "userhash": ""
+  },
+  "telegraph": {
+    "access_token": "",
+    "short_name": "manga-translator",
+    "author_name": "manga-translator"
+  },
+  "local": {
+    "output_dir": "./published"
+  }
+}
