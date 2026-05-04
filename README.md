@@ -79,8 +79,13 @@ python -m manga_translator local \
   -i "input_dir/" -o "output_dir/" \
   --config-file config.json --overwrite
 
-# Step 3: 推送到 Telegraph
-python3 push_translated_to_telegraph.py "output_dir/" --title "本子标题 (Chinese)"
+# Step 3: 发布翻译结果（本地输出 or Telegraph 聚合）
+# 默认：复制到 ./published/ 目录
+python3 publish.py "output_dir/"
+
+# 进阶：上传 Catbox → Telegraph 聚合页面，一条链接分享全本
+# 前置条件：去 https://catbox.moe/user/ 注册获取 userhash，填入 publish_config.json
+python3 publish.py "output_dir/" --mode telegraph --title "本子标题 (Chinese)"
 
 # 返回 Telegraph 链接 → 发送给用户
 ```
@@ -95,13 +100,16 @@ python3 push_translated_to_telegraph.py "output_dir/" --title "本子标题 (Chi
 - **颜色安全转换**：numpy 数组 → int tuple
 - 自动检测 `target_lang` 为 CJK 时路由至此渲染器
 
-### Telegraph 发布 (`push_translated_to_telegraph.py`)
+### 发布工具 (`publish.py`)
 
-复用 [tg-media-parser-bot](https://github.com/uncat2310/tg-media-parser-bot) 的 TelegraphClient：
-- 上传链：R2 → Catbox（自动回退）
-- 自动分页（每页 80 张）
-- 可选推送到 Telegram 频道
-- 输出 JSON 结果供调用方解析
+独立脚本，零外部依赖，支持两种模式：
+- **local（默认）**：开箱即用，复制翻译结果到本地目录
+- **telegraph（进阶）**：上传 Catbox 图床 → 创建 Telegraph 聚合页面，一条链接分享全本
+
+Telegraph 模式前置条件：
+- 去 [Catbox](https://catbox.moe/user/) 注册获取 userhash
+- 填入 `publish_config.json`（首次运行自动创建模板）
+- 无需 Telegraph 账户（脚本自动注册）
 
 ## ⚠️ 关键注意事项
 
@@ -117,6 +125,7 @@ python3 push_translated_to_telegraph.py "output_dir/" --title "本子标题 (Chi
 |------|------|------|------|
 | nhentai 431891 | 6 | 3.8 分钟 | 38s/页 |
 | nhentai 348355 | 8 | 3.9 分钟 | 29s/页 |
+| nhentai 408436 | 5 | 6.2 分钟 | 74s/页 |
 
 > 环境：Intel Xeon E3-1245 V2, 31GB RAM, CPU-only, DeepSeek v4-flash
 
