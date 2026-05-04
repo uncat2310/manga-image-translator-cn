@@ -1,5 +1,5 @@
 {
-  "_comment": "复制此文件为 publish_config.json，然后填入 catbox.userhash",
+  "_comment": "复制此文件为 publish_config.json，然后填入 catbox.userhash。telegraph 模式首次运行自动注册。",
   "mode": "local",
   "catbox": {
     "userhash": ""

@@ -47,19 +47,24 @@ DEFAULT_CONFIG = {
         "manga-translator 发布配置。\n"
         "  - local 模式无需任何配置，开箱即用。\n"
         "  - telegraph 模式需要 catbox userhash：去 https://catbox.moe/user/ 注册获取\n"
-        "  - telegraph access_token 留空即可，首次运行自动注册"
+        "  - telegraph access_token 留空即可，首次运行自动注册\n"
+        "  - telegram 频道推送可选：填 bot_token 和 channel_id 启用"
     ),
-    "mode": "local",              # 默认模式：local / telegraph
+    "mode": "local",
     "catbox": {
-        "userhash": ""            # 【必填】Catbox 图床 userhash。去 https://catbox.moe/user/ 注册获取
+        "userhash": ""
     },
     "telegraph": {
-        "access_token": "",       # 留空则自动注册（首次 telegraph 模式运行时）
+        "access_token": "",
         "short_name": "manga-translator",
         "author_name": "manga-translator"
     },
+    "telegram": {
+        "bot_token": "",
+        "channel_id": ""
+    },
     "local": {
-        "output_dir": "./published"   # local 模式默认输出目录
+        "output_dir": "./published"
     }
 }
 
