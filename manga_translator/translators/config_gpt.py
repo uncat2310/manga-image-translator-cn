@@ -53,7 +53,7 @@ class ConfigGPT:
         
         '## Translation Rules\n'  
         '- Translate line by line, maintaining accuracy and the authentic; Faithfully reproducing the original text and emotional intent.\n'          
-        '- Preserve original gibberish or sound effects without translation.\n'            
+        '- Translate sound effects and onomatopoeia into natural {to_lang} equivalents, preserving their emotional and audio intent.\n'            
         '- Output each segment with its prefix (<|number|> format exactly) and only provide the translation without raw text.\n'  
         '- Translate content only—no additional interpretation or commentary.\n'  
         

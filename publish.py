@@ -190,7 +190,7 @@ def mode_local(image_paths: List[str], output_dir: str) -> List[str]:
     return results
 
 
-def mode_telegraph(image_paths: List[str], config: dict, title: str) -> str:
+def mode_telegraph(image_paths: List[str], config: dict, title: str, no_push: bool = False) -> str:
     """
     【进阶】Telegraph 聚合发布模式。
     
@@ -254,6 +254,30 @@ def mode_telegraph(image_paths: List[str], config: dict, title: str) -> str:
     page_url = telegraph_create_page(access_token, title, img_urls)
     logger.info(f"Telegraph 页面: {page_url}")
 
+    # ── Telegram 频道推送（仅本地部署，未提交到 GitHub）──
+    tg_bot = config.get("telegram", {})
+    bot_token = tg_bot.get("bot_token", "").strip()
+    channel_id = tg_bot.get("channel_id", "").strip()
+    if bot_token and channel_id and not no_push:
+        try:
+            msg = (
+                f"📖 **{title}**\n"
+                f"📄 [Telegraph 图集]({page_url})\n"
+                f"共 {len(image_paths)} 页 | 翻译: DeepSeek v4-flash"
+            )
+            resp = requests.post(
+                f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                json={"chat_id": channel_id, "text": msg, "parse_mode": "Markdown"},
+                timeout=15
+            )
+            data = resp.json()
+            if data.get("ok"):
+                logger.info(f"频道推送成功: message_id={data['result']['message_id']}")
+            else:
+                logger.error(f"频道推送失败: {data}")
+        except Exception as e:
+            logger.error(f"频道推送异常: {e}")
+
     return page_url
 
 
@@ -288,6 +312,8 @@ def main():
     parser.add_argument("--title", help="Telegraph 页面标题（仅 telegraph 模式）")
     parser.add_argument("-o", "--output-dir", default="./published",
                         help="local 模式输出目录（默认: ./published）")
+    parser.add_argument("--no-push", action="store_true",
+                        help="不自动推送 Telegram 频道（默认会推，用于手动聚合后再推）")
 
     args = parser.parse_args()
 
@@ -322,7 +348,7 @@ def main():
 
     elif mode == "telegraph":
         try:
-            page_url = mode_telegraph(image_paths, config, args.title)
+            page_url = mode_telegraph(image_paths, config, args.title, no_push=args.no_push)
             result = {
                 "mode": "telegraph",
                 "title": args.title,

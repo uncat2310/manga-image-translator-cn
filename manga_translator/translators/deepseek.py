@@ -168,7 +168,10 @@ class DeepseekTranslator(CommonGPTTranslator):
                     # Clean translations by keeping only the content before the first newline  
                     new_translations = [t.split('\n')[0].strip() for t in new_translations]  
                     # Remove any potential prefix markers  
-                    new_translations = [re.sub(r'^\s*<\|\d+\|>\s*', '', t) for t in new_translations]  
+                    # Remove ALL <|number|> prefix markers (not just at start — vertical text artifact fix)
+                    new_translations = [re.sub(r'<\|\d+\|>', '', t).strip() for t in new_translations]  
+                    # 过滤畸形标记 ">数字<"（翻译引擎偶发的格式畸变）
+                    new_translations = [re.sub(r'>\d+<', '', t).strip() for t in new_translations]
                     # Check if any translations are empty  
                     if any(not t.strip() for t in new_translations):  
                         self.logger.warning(f'Empty translations detected. Resplitting the batch.') 
