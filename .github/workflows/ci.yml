@@ -36,9 +36,19 @@ jobs:
       run: |
         python3 -mvenv venv
         venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-    - name: Test
+    - name: Download fonts
+      # fonts/ is git-ignored (fetched separately by users); the render test needs the fallback fonts.
+      # Pinned to an upstream commit for reproducibility.
       run: |
-        venv/bin/pytest test
+        mkdir -p fonts
+        for f in Arial-Unicode-Regular.ttf msyh.ttc msgothic.ttc; do
+          curl -fsSL --retry 3 -o "fonts/$f" "https://raw.githubusercontent.com/zyddnys/manga-image-translator/441d07c59a735c7db3db2e7bb8b07920afd8a9cc/fonts/$f"
+        done
+    - name: Test
+      # test_online_translators scrapes live third-party web services (e.g. papago.naver.com)
+      # and breaks whenever they change; it needs network/API keys, so skip it in CI.
+      run: |
+        venv/bin/pytest test --deselect test/test_translation.py::test_online_translators
       timeout-minutes: 5
     - name: Lint *.py files
       run: |
