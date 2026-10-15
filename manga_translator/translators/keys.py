@@ -37,7 +37,7 @@ GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash-002')
 # deepseek
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
 DEEPSEEK_API_BASE  = os.getenv('DEEPSEEK_API_BASE', 'https://api.deepseek.com')
-DEEPSEEK_MODEL  = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat') # Or: "deepseek-reasoner"
+DEEPSEEK_MODEL  = os.getenv('DEEPSEEK_MODEL', 'deepseek-flash') # Or: "deepseek-v4-pro"
 
 # Atlas Cloud, an OpenAI-compatible gateway
 ATLASCLOUD_API_KEY = os.getenv('ATLASCLOUD_API_KEY', '')

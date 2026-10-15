@@ -184,9 +184,14 @@ class DeepseekTranslator(CommonGPTTranslator):
                     # Log progress  
                     self.logger.info(f'Batch translated: {len([t for t in translations if t])}/{len(queries)} completed.')  
                     self.logger.debug(f'Completed translations: {[t if t else queries[i] for i, t in enumerate(translations)]}')        
-                    return True  # Successfully translated this batch  
-                    
-                except openai.APIError:  
+                    return True  # Successfully translated this batch
+
+                except (openai.BadRequestError, openai.AuthenticationError,
+                        openai.PermissionDeniedError, openai.NotFoundError) as e:
+                    # Client errors (bad key / unknown model) won't succeed on retry or split
+                    self.logger.error(f'DeepSeek 拒绝了请求，请检查 .env 中的 DEEPSEEK_API_KEY 和 DEEPSEEK_MODEL：{e}')
+                    raise
+                except openai.APIError:
                     server_error_attempt += 1
                     if server_error_attempt >= self._RETRY_ATTEMPTS:
                         self.logger.error(

@@ -80,7 +80,7 @@ pip install -r requirements-rocm.txt  # AMD GPU (ROCm)
 DEEPSEEK_API_KEY=sk-xxxxxxxx
 # 可选
 DEEPSEEK_API_BASE=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-chat
+DEEPSEEK_MODEL=deepseek-flash        # 或 deepseek-v4-pro
 ```
 
 再复制配置模板：`cp config-example.json config.json`（Windows: `copy config-example.json config.json`）。

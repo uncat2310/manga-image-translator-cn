@@ -3066,7 +3066,7 @@ class TranslatorStudioApp(QMainWindow):
             "GEMINI_MODEL=gemini-1.5-flash",
             "\n# --- DeepSeek ---",
             "DEEPSEEK_API_KEY=",
-            "DEEPSEEK_MODEL=deepseek-chat",
+            "DEEPSEEK_MODEL=deepseek-flash",
             "DEEPSEEK_API_BASE=https://api.deepseek.com",
             "\n# --- Sakura Translator ---",
             "SAKURA_API_BASE=http://127.0.0.1:8080/v1",
