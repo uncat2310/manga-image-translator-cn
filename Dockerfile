@@ -1,6 +1,6 @@
 FROM pytorch/pytorch:2.14.1-cuda12.6-cudnn9-runtime
 
-# The base image\'s Python is marked externally managed (PEP 668); this container is the
+# The base image's Python is marked externally managed (PEP 668); this container is the
 # isolated environment, so let pip install into it.
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
