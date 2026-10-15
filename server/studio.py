@@ -64,16 +64,43 @@ class Engine:
         if self.start_fn is None:
             raise HTTPException(409, detail='翻译引擎不是由本服务启动的，请手动重启。')
         from server.instance import executor_instances
-        if self.proc is not None and self.proc.poll() is None:
-            self.proc.terminate()
+        if self.proc is not None:
+            _kill_tree(self.proc.pid)
+        # The old engine must have released its port, or the new one cannot bind it
+        import time
+        deadline = time.time() + 20
+        while time.time() < deadline:
             try:
-                self.proc.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
+                with socket.create_connection((self.host, self.port), timeout=0.3):
+                    time.sleep(0.5)
+            except OSError:
+                break
         # start_fn registers the new instance again; drop the stale one first
         executor_instances.list = [i for i in executor_instances.list
                                    if not (i.ip == self.host and i.port == self.port)]
         self.proc = self.start_fn()
+
+
+def _kill_tree(pid: int):
+    """Stop a process and its children. On Windows a venv's python.exe only relays to the real
+    interpreter in a child process, so terminating the parent alone left the old engine running."""
+    import psutil
+    try:
+        root = psutil.Process(pid)
+    except psutil.NoSuchProcess:
+        return
+    procs = root.children(recursive=True) + [root]
+    for p in procs:
+        try:
+            p.terminate()
+        except psutil.NoSuchProcess:
+            pass
+    _, alive = psutil.wait_procs(procs, timeout=15)
+    for p in alive:
+        try:
+            p.kill()
+        except psutil.NoSuchProcess:
+            pass
 
 
 engine = Engine()

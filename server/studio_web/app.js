@@ -324,8 +324,9 @@ createApp({
       if (!r.ok) throw new Error('结果保存失败');
     }
 
-    async function translatePage(p) {
-      p.status = 'running'; p.stageText = '排队中'; p.progress = 2; p.error = '';
+    const ENGINE_BUSY = /already being executed|429/;
+    async function translatePage(p, attempt = 0) {
+      p.status = 'running'; p.stageText = attempt ? '引擎忙，稍后重试' : '排队中'; p.progress = 2; p.error = '';
       const t0 = performance.now();
       abort = new AbortController();
       let skipped = false;
@@ -348,6 +349,11 @@ createApp({
         finishedInRun++;
       } catch (err) {
         if (err.name === 'AbortError') { p.status = 'queued'; p.stageText = ''; p.progress = 0; return; }
+        if (ENGINE_BUSY.test(String(err.message)) && attempt < 20 && !stopping.value) {
+          abort = null;
+          await new Promise((res) => setTimeout(res, 3000));
+          if (!stopping.value) return translatePage(p, attempt + 1);
+        }
         p.status = 'error';
         p.error = friendlyError(String(err.message || err));
       } finally {

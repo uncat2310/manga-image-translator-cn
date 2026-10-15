@@ -60,6 +60,7 @@ class MangaShare:
         # status codes are 0 for result, 1 for progress report, 2 for error
         self.progress_queue = asyncio.Queue()
         self.lock = Lock()
+        self._task = None
 
         async def hook(state: str, finished: bool):
             state_data = state.encode("utf-8")
@@ -73,8 +74,9 @@ class MangaShare:
         """
         loops until the status is != 1 which is eiter an error or the result
         """
+        queue = self.progress_queue
         while True:
-            progress = await self.progress_queue.get()
+            progress = await queue.get()
             yield progress
             if progress[0] != 1:
                 break
@@ -139,34 +141,44 @@ class MangaShare:
         async def execute_method(request: Request, method_name: str = Path(...)):
             self.check_nonce(request)
             self.check_lock()
-            method = self.get_fn(method_name)
-            attr = restricted_loads(await request.body())
             try:
+                method = self.get_fn(method_name)
+                attr = restricted_loads(await request.body())
                 if asyncio.iscoroutinefunction(method):
                     result = await method(**attr)
                 else:
                     result = method(**attr)
-                self.lock.release()
                 result_bytes = pickle.dumps(result)
                 return Response(content=result_bytes, media_type="application/octet-stream")
+            except HTTPException:
+                raise
             except Exception as e:
-                self.lock.release()
                 raise HTTPException(status_code=500, detail=str(e))
+            finally:
+                # Released on every path, including client disconnects while reading the body;
+                # a leaked lock made every later request fail with 429.
+                self.lock.release()
 
         @app.post("/execute/{method_name}")
         async def execute_method(request: Request, method_name: str = Path(...)):
             self.check_nonce(request)
             self.check_lock()
-            method = self.get_fn(method_name)
-            attr = restricted_loads(await request.body())
+            try:
+                method = self.get_fn(method_name)
+                attr = restricted_loads(await request.body())
 
-            # 根据端点类型决定是否使用占位符优化
-            config = attr.get('config')
-            self.manga._is_streaming_mode = getattr(config, '_web_frontend_optimized', False) if config else False
+                # 根据端点类型决定是否使用占位符优化
+                config = attr.get('config')
+                self.manga._is_streaming_mode = getattr(config, '_web_frontend_optimized', False) if config else False
 
-            # streaming response
-            streaming_response = StreamingResponse(self.progress_stream(), media_type="application/octet-stream")
-            asyncio.create_task(self.run_method(method, **attr))
+                # A fresh queue per request: leftovers of an aborted run must not reach the next client
+                self.progress_queue = asyncio.Queue()
+                streaming_response = StreamingResponse(self.progress_stream(), media_type="application/octet-stream")
+            except BaseException:
+                self.lock.release()
+                raise
+            # run_method releases the lock when it finishes
+            self._task = asyncio.create_task(self.run_method(method, **attr))
             return streaming_response
 
         config = uvicorn.Config(app, host=self.host, port=self.port)
