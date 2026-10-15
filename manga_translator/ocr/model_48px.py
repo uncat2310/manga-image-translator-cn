@@ -63,7 +63,20 @@ class Model48pxOCR(OfflineOCR):
 
     async def _unload(self):
         del self.model
-    
+
+    def _infer_batch(self, image_tensor: torch.Tensor, widths: List[int]):
+        # oneDNN on Intel GPUs fails to build kernels for a few specific shapes
+        # ("could not create a primitive", e.g. batch 8 at feature width 91), which failed the
+        # whole page every time. Padding changes the shape; the model masks by the real widths.
+        for attempt in range(4):
+            try:
+                return self.model.infer_beam_batch_tensor(image_tensor, widths, beams_k = 5, max_seq_length = 255)
+            except RuntimeError as e:
+                if 'could not create a primitive' not in str(e) or attempt == 3:
+                    raise
+                self.logger.warning(f'OCR kernel unavailable for shape {tuple(image_tensor.shape)}, retrying with padding')
+                image_tensor = F.pad(image_tensor, (0, 16), value = -1.0)
+
     async def _infer(self, image: np.ndarray, textlines: List[Quadrilateral], config: OcrConfig, verbose: bool = False, ignore_bubble: int = 0) -> List[TextBlock]:
         text_height = 48
         max_chunk_size = 16
@@ -117,7 +130,7 @@ class Model48pxOCR(OfflineOCR):
             if self.use_gpu:
                 image_tensor = image_tensor.to(self.device)
             with torch.no_grad():
-                ret = self.model.infer_beam_batch_tensor(image_tensor, widths, beams_k = 5, max_seq_length = 255)
+                ret = self._infer_batch(image_tensor, widths)
             for i, (pred_chars_index, prob, fg_pred, bg_pred, fg_ind_pred, bg_ind_pred) in enumerate(ret):
                 if prob < threshold:
                     continue
