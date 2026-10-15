@@ -22,6 +22,7 @@ from server.instance import ExecutorInstance, executor_instances
 from server.myqueue import task_queue
 from server.request_extraction import get_ctx, while_streaming, TranslateRequest, BatchTranslateRequest, get_batch_ctx
 from server.to_json import to_translation, TranslationResponse
+from server import studio
 
 app = FastAPI()
 nonce = None
@@ -37,6 +38,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+studio.mount(app)
 
 # 添加result文件夹静态文件服务
 if RESULT_ROOT.exists():
@@ -284,6 +287,8 @@ def prepare(args):
         nonce = os.getenv('MT_WEB_NONCE', generate_nonce())
     else:
         nonce = args.nonce
+    import server.instance
+    server.instance.INTERNAL_NONCE = None if nonce == "None" else nonce
     if args.start_instance:
         return start_translator_client_proc(args.host, args.port + 1, nonce, args)
     folder_name= "upload-cache"
@@ -393,6 +398,8 @@ if __name__ == '__main__':
     args = parse_arguments()
     args.start_instance = True
     proc = prepare(args)
+    studio.engine.attach(proc, lambda: start_translator_client_proc(args.host, args.port + 1, nonce, args),
+                         args.host, args.port + 1, args.use_gpu or args.use_gpu_limited)
     print("Nonce: "+nonce)
     try:
         uvicorn.run(app, host=args.host, port=args.port)

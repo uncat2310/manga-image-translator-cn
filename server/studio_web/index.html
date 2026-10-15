@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>漫画翻译工作台</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23d9412b'/%3E%3Ctext x='32' y='45' font-size='38' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'%3E译%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/studio/static/style.css">
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- 顶栏 -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="seal">译</div>
+      <div>
+        <div class="brand-title">漫画翻译工作台</div>
+        <div class="brand-sub">Manga Image Translator CN</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="chip" :class="engineChip.cls" :title="engineChip.title">
+        <span class="dot"></span>{{ engineChip.text }}
+      </div>
+      <button class="icon-btn" title="设置" @click="openSettings">
+        <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- 未设置 key 的提示 -->
+  <div class="banner" v-if="status.loaded && options.translator === 'deepseek' && !status.deepseek_key_set">
+    <span>还没有设置 DeepSeek API Key，翻译前需要先填写。</span>
+    <button class="btn btn-small btn-accent" @click="openSettings">去设置</button>
+  </div>
+
+  <main class="layout"
+        @dragover.prevent="dragging = true" @dragleave.self="dragging = false" @drop.prevent="onDrop">
+
+    <!-- 左侧：页面 -->
+    <section class="workspace">
+
+      <div class="urlbar" :class="{ busy: importing }">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+        <input type="url" v-model.trim="importUrl" :disabled="importing || running"
+               placeholder="粘贴漫画网页链接，例如 https://nhentai.net/g/123456/" @keydown.enter="importFromUrl">
+        <label class="check check-small" title="下载完成后立即开始翻译">
+          <input type="checkbox" v-model="options.autoTranslate"> 自动翻译
+        </label>
+        <button class="btn btn-accent" :disabled="!importUrl || importing || running" @click="importFromUrl">
+          {{ importing ? '下载中…' : (options.autoTranslate ? '下载并翻译' : '下载') }}
+        </button>
+      </div>
+      <div class="import-status" v-if="importJob" :class="'is-' + importJob.status">
+        <div class="import-line">
+          <span v-if="importJob.status === 'probing'"><span class="spinner spinner-sm"></span>正在读取图集信息…</span>
+          <span v-else-if="importJob.status === 'downloading'"><span class="spinner spinner-sm"></span>正在下载「{{ importJob.title }}」 {{ importJob.downloaded }} / {{ importJob.total }}</span>
+          <span v-else-if="importJob.status === 'loading'"><span class="spinner spinner-sm"></span>正在载入图片…</span>
+          <span v-else-if="importJob.status === 'error'" class="text-error">下载失败：{{ importJob.error }}</span>
+          <button class="mini mini-light" v-if="importJob.status === 'error'" @click="importJob = null">✕</button>
+        </div>
+        <div class="progress" v-if="importJob.status === 'downloading'"><div :style="{ width: (importJob.total ? importJob.downloaded / importJob.total * 100 : 0) + '%' }"></div></div>
+      </div>
+
+      <div v-if="!pages.length" class="dropzone" :class="{ active: dragging }" @click="pickFiles">
+        <svg class="dz-art" viewBox="0 0 160 120" aria-hidden="true">
+          <rect x="38" y="14" width="64" height="88" rx="6" class="dz-page back"/>
+          <rect x="54" y="20" width="64" height="88" rx="6" class="dz-page"/>
+          <ellipse cx="86" cy="50" rx="20" ry="13" class="dz-bubble"/>
+          <path d="M80 62 l-6 9 l12 -7" class="dz-bubble"/>
+          <line x1="76" y1="47" x2="96" y2="47" class="dz-ink"/><line x1="79" y1="53" x2="93" y2="53" class="dz-ink"/>
+          <rect x="62" y="80" width="48" height="4" rx="2" class="dz-line"/><rect x="62" y="88" width="34" height="4" rx="2" class="dz-line"/>
+        </svg>
+        <div class="dz-title">把漫画图片或整个文件夹拖到这里</div>
+        <div class="dz-sub">支持 PNG、JPG、WEBP，按文件名顺序排列；也可以在上方粘贴网页链接</div>
+        <div class="dz-actions" @click.stop>
+          <button class="btn btn-accent" @click="pickFiles">选择图片</button>
+          <button class="btn" @click="pickFolder">选择文件夹</button>
+        </div>
+      </div>
+
+      <template v-else>
+        <div class="toolbar">
+          <div class="summary">
+            <div class="summary-title">{{ folderName }}</div>
+            <div class="summary-meta">
+              共 {{ pages.length }} 页
+              <template v-if="counts.done"> · 已完成 {{ counts.done }}</template>
+              <template v-if="counts.error"> · <span class="text-error">失败 {{ counts.error }}</span></template>
+              <template v-if="running && etaText"> · {{ etaText }}</template>
+            </div>
+          </div>
+          <div class="toolbar-actions">
+            <button class="btn btn-ghost" @click="pickFiles" :disabled="running">添加图片</button>
+            <button class="btn btn-ghost" @click="clearAll" :disabled="running">清空</button>
+            <button class="btn" @click="openFolder" :disabled="!counts.done">打开文件夹</button>
+            <a class="btn" :class="{ disabled: !counts.done }" :href="zipUrl" download>下载全部</a>
+          </div>
+        </div>
+        <div class="overall"><div class="overall-bar" :style="{ width: overallProgress + '%' }"></div></div>
+
+        <div class="grid" :class="{ active: dragging }">
+          <article v-for="(p, i) in pages" :key="p.id" class="card" :class="'is-' + p.status"
+                   @click="openViewer(i)">
+            <div class="thumb">
+              <img :src="p.resultUrl || p.srcUrl" :alt="p.name" loading="lazy">
+              <span class="badge" v-if="p.status === 'done'">已翻译</span>
+              <span class="badge badge-muted" v-else-if="p.status === 'skipped'">无文字</span>
+              <div class="card-overlay" v-if="p.status === 'running'">
+                <div class="spinner"></div>
+                <div>{{ p.stageText }}</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="card-name" :title="p.name">{{ i + 1 }}. {{ p.name }}</div>
+              <div class="card-status">
+                <span v-if="p.status === 'queued'">等待中</span>
+                <span v-else-if="p.status === 'running'">{{ p.stageText }}</span>
+                <span v-else-if="p.status === 'done'" class="text-ok">完成 · {{ (p.ms / 1000).toFixed(1) }} 秒</span>
+                <span v-else-if="p.status === 'skipped'">没有检测到文字</span>
+                <span v-else-if="p.status === 'error'" class="text-error" :title="p.error">失败：{{ p.error }}</span>
+              </div>
+              <div class="progress" v-if="p.status === 'running'"><div :style="{ width: p.progress + '%' }"></div></div>
+            </div>
+            <div class="card-actions" @click.stop>
+              <button class="mini" v-if="p.status === 'error' || p.status === 'done'" :disabled="running"
+                      title="重新翻译" @click="retry(i)">↻</button>
+              <button class="mini" :disabled="p.status === 'running'" title="移除" @click="removePage(i)">✕</button>
+            </div>
+          </article>
+        </div>
+      </template>
+    </section>
+
+    <!-- 右侧：设置 -->
+    <aside class="sidebar">
+      <div class="panel">
+        <div class="panel-title">翻译设置</div>
+
+        <label class="field">
+          <span>翻译方式</span>
+          <select v-model="options.translator" :disabled="running">
+            <option value="deepseek">DeepSeek 翻译（推荐）</option>
+            <option value="original">保留原文，只重新排版</option>
+            <option value="none">只去除文字，不嵌字</option>
+          </select>
+        </label>
+
+        <label class="field" v-if="options.translator === 'deepseek'">
+          <span>译成</span>
+          <select v-model="options.targetLang" :disabled="running">
+            <option v-for="l in languages" :key="l.code" :value="l.code">{{ l.name }}</option>
+          </select>
+        </label>
+
+        <div class="field">
+          <span>文字方向</span>
+          <div class="segmented">
+            <button v-for="d in directions" :key="d.value" :class="{ on: options.direction === d.value }"
+                    :disabled="running" @click="options.direction = d.value">{{ d.label }}</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <span>处理精度</span>
+          <div class="segmented">
+            <button v-for="q in qualities" :key="q.value" :class="{ on: options.quality === q.value }"
+                    :disabled="running" :title="q.hint" @click="options.quality = q.value">{{ q.label }}</button>
+          </div>
+          <small>{{ qualityHint }}</small>
+        </div>
+
+        <div class="field">
+          <span>字号微调 <b class="val">{{ options.fontOffset > 0 ? '+' : '' }}{{ options.fontOffset }}</b></span>
+          <input type="range" min="-10" max="10" step="1" v-model.number="options.fontOffset" :disabled="running">
+        </div>
+
+        <details class="advanced">
+          <summary>高级选项</summary>
+          <label class="field">
+            <span>去字模型</span>
+            <select v-model="options.inpainter" :disabled="running">
+              <option value="lama_large">LaMa Large（效果最好）</option>
+              <option value="lama_mpe">LaMa MPE（更快）</option>
+              <option value="default">AOT（最快）</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>文字识别</span>
+            <select v-model="options.ocr" :disabled="running">
+              <option value="48px">48px（推荐）</option>
+              <option value="mocr">manga-ocr（日文单气泡）</option>
+              <option value="32px">32px（旧版）</option>
+            </select>
+          </label>
+          <label class="check">
+            <input type="checkbox" v-model="options.noBorder" :disabled="running">
+            <span>文字不加白色描边</span>
+          </label>
+        </details>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">保存位置</div>
+        <label class="field">
+          <span>作品名称</span>
+          <input type="text" v-model.trim="folderName" :disabled="running" placeholder="例如：第 1 话">
+        </label>
+        <small class="path" :title="outputPath">翻译好的图片会自动保存到<br>{{ outputPath }}</small>
+      </div>
+
+      <button class="btn btn-accent btn-big" v-if="!running" :disabled="!canStart" @click="start">
+        {{ startLabel }}
+      </button>
+      <button class="btn btn-big btn-stop" v-else @click="stop">
+        {{ stopping ? '正在停止…' : '停止' }}
+      </button>
+      <div class="start-hint" v-if="startHint">{{ startHint }}</div>
+    </aside>
+  </main>
+
+  <!-- 对比查看 -->
+  <div class="viewer" v-if="viewer.open" @click.self="closeViewer">
+    <div class="viewer-top">
+      <div class="viewer-name">{{ viewer.index + 1 }} / {{ pages.length }} · {{ current.name }}</div>
+      <div class="segmented segmented-dark">
+        <button :class="{ on: viewer.mode === 'compare' }" :disabled="!current.resultUrl" @click="viewer.mode = 'compare'">对比</button>
+        <button :class="{ on: viewer.mode === 'result' }" :disabled="!current.resultUrl" @click="viewer.mode = 'result'">译图</button>
+        <button :class="{ on: viewer.mode === 'original' }" @click="viewer.mode = 'original'">原图</button>
+      </div>
+      <div class="viewer-actions">
+        <a class="btn btn-small" v-if="current.resultUrl" :href="current.resultUrl" :download="downloadName(current)">下载此页</a>
+        <button class="icon-btn icon-btn-dark" title="关闭 (Esc)" @click="closeViewer">✕</button>
+      </div>
+    </div>
+    <button class="nav nav-prev" :disabled="viewer.index === 0" @click="step(-1)">‹</button>
+    <div class="stage" ref="stage">
+      <div class="frame" v-if="viewer.mode === 'compare' && current.resultUrl"
+           @pointerdown="dragSplit" :style="{ '--split': viewer.split + '%' }">
+        <img :src="current.resultUrl" draggable="false">
+        <img :src="current.srcUrl" class="clip" draggable="false">
+        <div class="divider"><span>原图 ⟷ 译图</span></div>
+      </div>
+      <div class="frame" v-else>
+        <img :src="viewer.mode === 'result' && current.resultUrl ? current.resultUrl : current.srcUrl" draggable="false">
+      </div>
+    </div>
+    <button class="nav nav-next" :disabled="viewer.index === pages.length - 1" @click="step(1)">›</button>
+  </div>
+
+  <!-- 设置 -->
+  <div class="modal-mask" v-if="settings.open" @click.self="settings.open = false">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">设置</div>
+        <button class="icon-btn" @click="settings.open = false">✕</button>
+      </div>
+      <div class="modal-body">
+        <label class="field">
+          <span>DeepSeek API Key
+            <b class="pill" :class="status.deepseek_key_set ? 'pill-ok' : 'pill-warn'">{{ status.deepseek_key_set ? '已设置' : '未设置' }}</b>
+          </span>
+          <div class="input-group">
+            <input :type="settings.showKey ? 'text' : 'password'" v-model.trim="settings.key"
+                   :placeholder="status.deepseek_key_set ? '已保存，留空则不修改' : '粘贴以 sk- 开头的 Key'" autocomplete="off">
+            <button class="btn btn-ghost" @click="settings.showKey = !settings.showKey">{{ settings.showKey ? '隐藏' : '显示' }}</button>
+          </div>
+          <small>在 <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noopener">platform.deepseek.com</a> 创建。Key 只保存在本机项目的 .env 文件里。</small>
+        </label>
+        <label class="field">
+          <span>DeepSeek 模型</span>
+          <select v-model="settings.model">
+            <option v-for="m in status.deepseek_models" :key="m" :value="m">{{ m === 'deepseek-flash' ? 'deepseek-flash（快、便宜）' : m === 'deepseek-v4-pro' ? 'deepseek-v4-pro（质量更高）' : m }}</option>
+          </select>
+        </label>
+        <div class="info-row">
+          <span>计算设备</span>
+          <b>{{ status.use_gpu ? (status.gpu_name || 'GPU') : 'CPU' }}</b>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <small>保存后翻译引擎会自动重启，约需 30 秒。</small>
+        <button class="btn btn-accent" :disabled="settings.saving || running" @click="saveSettings">
+          {{ settings.saving ? '保存中…' : '保存' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提示 -->
+  <div class="toasts">
+    <div v-for="t in toasts" :key="t.id" class="toast" :class="'toast-' + t.type">{{ t.text }}</div>
+  </div>
+
+  <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" multiple hidden @change="onPick">
+  <input ref="folderInput" type="file" webkitdirectory multiple hidden @change="onPick">
+</div>
+
+<script src="/studio/static/vendor/vue.global.prod.js"></script>
+<script src="/studio/static/app.js"></script>
+</body>
+</html>

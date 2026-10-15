@@ -155,11 +155,12 @@ class Page:
 			if dlines is None or dlines[0] is None:
 				break
 
-			for dline in dlines[0]:
-				x0 = int(round(dline[0][0]))
-				y0 = int(round(dline[0][1]))
-				x1 = int(round(dline[0][2]))
-				y1 = int(round(dline[0][3]))
+			# OpenCV < 5 returns lines as (N, 1, 4), OpenCV 5 as (N, 4)
+			for dline in np.asarray(dlines[0]).reshape(-1, 4):
+				x0 = int(round(dline[0]))
+				y0 = int(round(dline[1]))
+				x1 = int(round(dline[2]))
+				y1 = int(round(dline[3]))
 
 				a = x0 - x1
 				b = y0 - y1
