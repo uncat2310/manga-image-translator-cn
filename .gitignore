@@ -62,3 +62,6 @@ test_input.png
 Thumbs.db
 /published/
 /downloads/
+
+# 本机虚拟环境位置（启动翻译工作台.bat 读取）
+.venv-path
