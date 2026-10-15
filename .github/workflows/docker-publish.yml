@@ -6,6 +6,11 @@ on:
     tags: [ 'v*.*.*' ]
   workflow_dispatch:
 
+# A newer push supersedes an in-flight image build for the same branch/tag
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
