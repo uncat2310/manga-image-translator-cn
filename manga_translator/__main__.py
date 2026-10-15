@@ -85,7 +85,11 @@ if __name__ == '__main__':
     init_logging()
     try:
         args, unknown = parser.parse_known_args()
-        args = Namespace(**{**vars(args), **vars(reparse(unknown))})
+        # General options may also follow the mode (e.g. `local --use-gpu`); merge only the ones
+        # actually given there, so defaults don't clobber options passed before the mode.
+        defaults = vars(reparse([]))
+        extra = {k: v for k, v in vars(reparse(unknown)).items() if v != defaults.get(k)}
+        args = Namespace(**{**vars(args), **extra})
         set_log_level(level=logging.DEBUG if args.verbose else logging.INFO)
         logger = get_logger(args.mode)
         set_main_logger(logger)

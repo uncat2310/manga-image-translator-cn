@@ -90,7 +90,7 @@ class LamaMPEInpainter(OfflineInpainter):
             mask_torch = mask_torch.to(self.device)
         with torch.no_grad():
             img_torch *= (1 - mask_torch)
-            if not (self.device.startswith('cuda')):
+            if not (self.device.startswith('cuda') or self.device == 'xpu'):
                 # mps devices here
                 img_inpainted_torch = self.model(img_torch, mask_torch)
             else:
@@ -103,7 +103,7 @@ class LamaMPEInpainter(OfflineInpainter):
                     precision = torch.bfloat16
                     self.logger.warning('Switch to bf16 due to Lama only compatible with bf16 and fp32.')
 
-                with torch.autocast(device_type="cuda", dtype=precision):
+                with torch.autocast(device_type='xpu' if self.device == 'xpu' else 'cuda', dtype=precision):
                     img_inpainted_torch = self.model(img_torch, mask_torch)
 
         if isinstance(self.model, LamaFourier):
