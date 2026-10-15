@@ -6,7 +6,7 @@ import string
 from typing import List, Dict
 from rich.console import Console  
 from rich.panel import Panel
-from .. import manga_translator
+import sys
 from .config_gpt import ConfigGPT
 from .common import CommonTranslator, MissingAPIKeyException, VALID_LANGUAGES
 from .keys import OPENAI_API_KEY, OPENAI_HTTP_PROXY, OPENAI_API_BASE, OPENAI_MODEL, OPENAI_GLOSSARY_PATH
@@ -76,6 +76,7 @@ class OpenAITranslator(ConfigGPT, CommonTranslator):
                 OpenAITranslator._glossary_warning_shown = True
 
         # 添加 rich 的 Console 对象  
+        manga_translator = sys.modules.get('manga_translator.manga_translator')
         if hasattr(manga_translator, '_global_console') and manga_translator._global_console:
             self.console = manga_translator._global_console
         else:
@@ -713,6 +714,7 @@ class OpenAITranslator(ConfigGPT, CommonTranslator):
         
         # 同时输出到日志文件（纯文本格式）
         
+        manga_translator = sys.modules.get('manga_translator.manga_translator')
         if hasattr(manga_translator, '_log_console') and manga_translator._log_console:
             # 直接输出纯文本，不使用边框
             manga_translator._log_console.print(f"=== {title} ===")

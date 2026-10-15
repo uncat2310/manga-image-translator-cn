@@ -9,6 +9,7 @@ Key improvements over default renderer:
 4. Padding/margin for bubble fill
 """
 
+import re
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from typing import Tuple, Optional, List
@@ -18,14 +19,28 @@ import os
 from ..utils import BASE_PATH
 
 
-def _get_cjk_font(font_size: int = 30) -> ImageFont.FreeTypeFont:
-    """Get a CJK font, with fallback chain."""
-    font_candidates = [
+_NOTO_CJK = os.path.join(BASE_PATH, 'fonts', 'NotoSansMonoCJK-VF.ttf.ttc')
+
+# Microsoft YaHei has no Hangul, so Korean needs its own chain; Japanese reads
+# more naturally in a Japanese face. Noto CJK covers all three as the fallback.
+_LANG_FONTS = {
+    'KOR': ['C:/Windows/Fonts/malgunbd.ttf', 'C:/Windows/Fonts/malgun.ttf',
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc', _NOTO_CJK],
+    'JPN': ['C:/Windows/Fonts/YuGothB.ttc', 'C:/Windows/Fonts/meiryob.ttc', 'C:/Windows/Fonts/meiryo.ttc',
+            os.path.join(BASE_PATH, 'fonts', 'msgothic.ttc'), _NOTO_CJK],
+}
+_LANG_ALIASES = {'ko': 'KOR', 'ja': 'JPN'}
+
+
+def _get_cjk_font(font_size: int = 30, lang: str = '') -> ImageFont.FreeTypeFont:
+    """Get a CJK font for the target language, with fallback chain."""
+    lang = _LANG_ALIASES.get(lang, lang)
+    font_candidates = _LANG_FONTS.get(lang, []) + [
         os.path.join(BASE_PATH, 'fonts', 'NotoSansSC-Regular.ttf'),
         os.path.join(BASE_PATH, 'fonts', 'msyh.ttc'),
         '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
         'C:/Windows/Fonts/msyh.ttc',
-        os.path.join(BASE_PATH, 'fonts', 'NotoSansMonoCJK-VF.ttf.ttc'),
+        _NOTO_CJK,
     ]
     for fp in font_candidates:
         if os.path.exists(fp):
@@ -37,6 +52,13 @@ def _get_cjk_font(font_size: int = 30) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
+def _line_height(font: ImageFont.FreeTypeFont, lang: str = '') -> int:
+    """Glyph height of a representative character the font actually has."""
+    sample = {'KOR': '\uac00', 'ko': '\uac00', 'JPN': '\u3042', 'ja': '\u3042'}.get(lang, '\u554a')
+    box = font.getbbox(sample)
+    return box[3] - box[1]
+
+
 def _is_punct(char: str) -> bool:
     """Check if character is Chinese/Japanese punctuation that shouldn't start a line."""
     return char in '，。！？、；：」』》）】〗」》〉"\'!?,.;:)}>…～—'
@@ -45,56 +67,69 @@ def _is_open_punct(char: str) -> bool:
     """Check if character is opening punctuation that shouldn't end a line."""
     return char in '「『《（【〖〈『《"\'({[<'
 
+# Ideographs and kana may break anywhere; Hangul and Latin words are space-separated and
+# must stay whole (otherwise Korean words get split across lines).
+_BREAK_ANYWHERE = re.compile(r'[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\u3000-\u303f\uff00-\uffef]')
+
+
+def _wrap_units(text: str) -> List[str]:
+    """Split text into the smallest pieces that may not be broken internally."""
+    units, word = [], ''
+    for ch in text:
+        if ch.isspace() or _BREAK_ANYWHERE.match(ch):
+            if word:
+                units.append(word)
+                word = ''
+            units.append(ch)
+        else:
+            word += ch
+    if word:
+        units.append(word)
+    return units
+
+
 def wrap_text_cjk(text: str, font: ImageFont.FreeTypeFont, max_width: int) -> List[str]:
     """
     Wrap CJK text into lines that fit within max_width.
-    Breaks at character boundaries, with smart handling of punctuation.
+    Ideographs/kana break per character; Hangul/Latin words break at spaces,
+    and only words wider than a whole line are split by character.
     """
     if not text:
         return []
-    
+
     lines = []
     current_line = ''
-    current_width = 0.0
-    
-    i = 0
-    while i < len(text):
-        char = text[i]
-        
-        # Handle newlines in source text
-        if char == '\n':
-            if current_line:
-                lines.append(current_line)
-            current_line = ''
-            current_width = 0.0
-            i += 1
+
+    def flush():
+        nonlocal current_line
+        if current_line.strip():
+            lines.append(current_line.rstrip())
+        current_line = ''
+
+    for unit in _wrap_units(text):
+        if unit == '\n':
+            flush()
             continue
-        
-        char_width = font.getlength(char)
-        
-        # If adding this char exceeds max width
-        if current_width + char_width > max_width and current_line:
-            # Try to keep trailing punctuation on current line
-            if i + 1 < len(text) and _is_punct(text[i + 1]):
-                # Look ahead - maybe push one more char
-                pass
-            
-            lines.append(current_line)
-            current_line = ''
-            current_width = 0.0
-            
-            # Skip leading spaces on new line
-            if char in ' 　':
-                i += 1
-                continue
-        
-        current_line += char
-        current_width += char_width
-        i += 1
-    
-    if current_line:
-        lines.append(current_line)
-    
+        if not current_line and unit.isspace():
+            continue  # no leading spaces on a new line
+        if font.getlength(current_line + unit) <= max_width:
+            current_line += unit
+            continue
+        # Keep closing punctuation on the current line rather than starting a new one with it
+        if len(unit) == 1 and _is_punct(unit) and current_line:
+            current_line += unit
+            continue
+        flush()
+        if unit.isspace():
+            continue
+        if font.getlength(unit) <= max_width:
+            current_line = unit
+            continue
+        for ch in unit:  # a single word wider than the line: split it
+            if current_line and font.getlength(current_line + ch) > max_width:
+                flush()
+            current_line += ch
+    flush()
     return lines
 
 
@@ -149,7 +184,7 @@ def put_text_horizontal_cn(
     if fp and os.path.exists(fp):
         font = ImageFont.truetype(fp, font_size)
     if font is None:
-        font = _get_cjk_font(font_size)
+        font = _get_cjk_font(font_size, lang)
     
     # Line spacing for CJK - slightly more than Latin
     spacing_px = int(font_size * 0.15)
@@ -165,7 +200,7 @@ def put_text_horizontal_cn(
             lines = [text]
         
         n_lines = len(lines)
-        line_height = font.getbbox('啊')[3] - font.getbbox('啊')[1]
+        line_height = _line_height(font, lang)
         total_text_h = line_height * n_lines + spacing_px * (n_lines - 1)
         
         # Check if text height fits within region
@@ -174,7 +209,7 @@ def put_text_horizontal_cn(
         
         # Reduce font size and recalculate
         font_size = max(int(font_size * 0.8), 10)
-        font = ImageFont.truetype(fp, font_size) if fp and os.path.exists(fp) else _get_cjk_font(font_size)
+        font = ImageFont.truetype(fp, font_size) if fp and os.path.exists(fp) else _get_cjk_font(font_size, lang)
         spacing_px = int(font_size * 0.15)
         effective_width = max(width, font_size * 3) - font_size // 2
     
@@ -302,7 +337,7 @@ def render_textblock_list_cn(
         if font_path and os.path.exists(font_path):
             font = ImageFont.truetype(font_path, font_size)
         else:
-            font = _get_cjk_font(font_size)
+            font = _get_cjk_font(font_size, getattr(region, 'target_lang', ''))
         
         # Wrap text
         # Add padding so text doesn't touch bubble edges
@@ -314,7 +349,7 @@ def render_textblock_list_cn(
             continue
         
         # Calculate text block dimensions
-        line_height = font.getbbox('测')[3] - font.getbbox('测')[1]
+        line_height = _line_height(font, getattr(region, 'target_lang', ''))
         spacing = int(font_size * 0.2)
         text_block_h = line_height * len(lines) + spacing * (len(lines) - 1)
         text_block_w = max(font.getlength(line) for line in lines)

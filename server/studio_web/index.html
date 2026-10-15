@@ -5,24 +5,105 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>漫画翻译工作台</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23d9412b'/%3E%3Ctext x='32' y='45' font-size='38' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'%3E译%3C/text%3E%3C/svg%3E">
+  <script>(function () {
+    var t = 'island', m = 'auto', d = document.documentElement;
+    try { t = localStorage.getItem('mit-studio-theme') || t; m = localStorage.getItem('mit-studio-mode') || m; } catch (e) {}
+    d.dataset.theme = t === 'comic' ? 'comic' : 'island';
+    d.dataset.mode = m;
+    d.dataset.scheme = m === 'auto' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : m;
+  })();</script>
   <link rel="stylesheet" href="/studio/static/style.css">
 </head>
 <body>
 <div id="app" v-cloak>
+  <div class="scenery" aria-hidden="true">
+    <i class="cloud"></i><i class="cloud"></i><i class="cloud"></i>
+    <i class="moon"></i>
+    <b class="twinkle"></b><b class="twinkle"></b><b class="twinkle"></b><b class="twinkle"></b><b class="twinkle"></b><b class="twinkle"></b>
+    <s class="firefly"></s><s class="firefly"></s><s class="firefly"></s><s class="firefly"></s><s class="firefly"></s><s class="firefly"></s>
+  </div>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="mascot" viewBox="0 0 120 120">
+      <defs>
+        <clipPath id="cat-head-clip"><ellipse cx="60" cy="56" rx="36" ry="30"/></clipPath>
+        <clipPath id="cat-body-clip"><ellipse cx="60" cy="93" rx="28" ry="18"/></clipPath>
+      </defs>
+      <ellipse cx="60" cy="112" rx="32" ry="5" fill="rgba(40,30,20,.14)"/>
+      <g class="m-sprout">
+        <path d="M82 100 C104 102 110 82 100 70" fill="none" stroke="#6b4a35" stroke-width="10" stroke-linecap="round"/>
+        <path d="M82 100 C104 102 110 82 100 70" fill="none" stroke="#f5a35a" stroke-width="5" stroke-linecap="round"/>
+        <path d="M103 79 C103 75 101 72 100 70" fill="none" stroke="#3d3533" stroke-width="5" stroke-linecap="round"/>
+      </g>
+      <ellipse cx="60" cy="93" rx="28" ry="18" fill="#fffaf2"/>
+      <g clip-path="url(#cat-body-clip)">
+        <ellipse cx="80" cy="86" rx="14" ry="11" fill="#f5a35a"/>
+        <ellipse cx="38" cy="99" rx="9" ry="7" fill="#3d3533"/>
+      </g>
+      <ellipse cx="60" cy="93" rx="28" ry="18" fill="none" stroke="#6b4a35" stroke-width="3"/>
+      <ellipse cx="47" cy="107" rx="8.5" ry="5" fill="#fffaf2" stroke="#6b4a35" stroke-width="3"/>
+      <ellipse cx="73" cy="107" rx="8.5" ry="5" fill="#fffaf2" stroke="#6b4a35" stroke-width="3"/>
+      <ellipse cx="35" cy="93" rx="7" ry="6" fill="#fffaf2" stroke="#6b4a35" stroke-width="3"/>
+      <path d="M31 40 L27 11 L53 27 Z" fill="#f5a35a" stroke="#6b4a35" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M34 34 L32 19 L46 27 Z" fill="#ffc6c0"/>
+      <path d="M89 40 L93 11 L67 27 Z" fill="#3d3533" stroke="#6b4a35" stroke-width="3" stroke-linejoin="round"/>
+      <path d="M86 34 L88 19 L74 27 Z" fill="#ffb3ad"/>
+      <ellipse cx="60" cy="56" rx="36" ry="30" fill="#fffaf2"/>
+      <g clip-path="url(#cat-head-clip)">
+        <path d="M20 20 L58 20 C58 34 52 44 40 46 C30 47 22 44 18 40 Z" fill="#f5a35a"/>
+        <path d="M66 20 L100 20 L100 44 C90 46 80 44 74 38 C69 33 66 27 66 20 Z" fill="#3d3533"/>
+      </g>
+      <ellipse cx="60" cy="56" rx="36" ry="30" fill="none" stroke="#6b4a35" stroke-width="3"/>
+      <g class="m-eyes">
+        <ellipse cx="45" cy="55" rx="5" ry="6.5" fill="#3b2a1d"/>
+        <ellipse cx="75" cy="55" rx="5" ry="6.5" fill="#3b2a1d"/>
+        <circle cx="46.8" cy="52.4" r="1.8" fill="#fff"/>
+        <circle cx="76.8" cy="52.4" r="1.8" fill="#fff"/>
+      </g>
+      <ellipse cx="36" cy="66" rx="6" ry="3.5" fill="#ff8f8f" opacity=".5"/>
+      <ellipse cx="84" cy="66" rx="6" ry="3.5" fill="#ff8f8f" opacity=".5"/>
+      <path d="M57 63 L63 63 L60 66.5 Z" fill="#ff8f8f" stroke="#c45c5c" stroke-width="1" stroke-linejoin="round"/>
+      <path d="M54 69 Q57 72.5 60 69 Q63 72.5 66 69" fill="none" stroke="#3b2a1d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <g stroke="#6b4a35" stroke-width="1.8" stroke-linecap="round">
+        <path d="M41 65 L25 62"/><path d="M41 69 L26 71"/><path d="M79 65 L95 62"/><path d="M79 69 L94 71"/>
+      </g>
+      <g class="m-arm">
+        <path d="M80 92 Q90 88 94 78" fill="none" stroke="#6b4a35" stroke-width="13" stroke-linecap="round"/>
+        <path d="M80 92 Q90 88 94 78" fill="none" stroke="#fffaf2" stroke-width="7.5" stroke-linecap="round"/>
+        <ellipse cx="95" cy="75" rx="8" ry="8.5" fill="#fffaf2" stroke="#6b4a35" stroke-width="3"/>
+        <ellipse cx="95" cy="77" rx="3.2" ry="2.6" fill="#ffc6c0"/>
+        <circle cx="91" cy="71.5" r="1.5" fill="#ffc6c0"/><circle cx="95" cy="70" r="1.5" fill="#ffc6c0"/><circle cx="99" cy="71.5" r="1.5" fill="#ffc6c0"/>
+      </g>
+    </symbol>
+    <symbol id="leaf" viewBox="0 0 24 24">
+      <path d="M4 20 C4 10 10 4 21 3 C20 14 14 20 4 20Z" fill="currentColor"/>
+      <path d="M5 19 C9 14 13 10 18 6" fill="none" stroke="rgba(0,0,0,.18)" stroke-width="1.4" stroke-linecap="round"/>
+    </symbol>
+  </svg>
 
   <!-- 顶栏 -->
-  <header class="topbar">
+  <header class="topbar glass">
     <div class="brand">
       <div class="seal">译</div>
-      <div>
+      <svg class="brand-mascot only-island" aria-hidden="true"><use href="#mascot"/></svg>
+      <div class="island-letters only-island" aria-hidden="true"><b>漫</b><b>画</b><b>翻</b><b>译</b></div>
+      <div class="brand-text">
         <div class="brand-title">漫画翻译工作台</div>
         <div class="brand-sub">Manga Image Translator CN</div>
       </div>
     </div>
     <div class="topbar-right">
-      <div class="chip" :class="engineChip.cls" :title="engineChip.title">
+      <div class="clock only-island" aria-hidden="true">
+        <div class="clock-date"><small>{{ clock.week }}</small><span>{{ clock.date }}</span></div>
+        <div class="clock-time">{{ clock.time }}</div>
+      </div>
+      <div class="chip glass" :class="engineChip.cls" :title="engineChip.title">
         <span class="dot"></span>{{ engineChip.text }}
       </div>
+      <button class="icon-btn mode-btn" :title="'外观：' + modeLabel + '（点击切换）'" @click="cycleMode">
+        <svg v-if="mode === 'light'" key="l" class="mode-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>
+        <svg v-else-if="mode === 'dark'" key="d" class="mode-icon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>
+        <svg v-else key="a" class="mode-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17A8.5 8.5 0 0 0 12 3.5Z" fill="currentColor" stroke="none"/></svg>
+      </button>
       <button class="icon-btn" title="设置" @click="openSettings">
         <svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
       </button>
@@ -41,10 +122,10 @@
     <!-- 左侧：页面 -->
     <section class="workspace">
 
-      <div class="urlbar" :class="{ busy: importing }">
+      <div class="urlbar glass" :class="{ busy: importing }">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
         <input type="url" v-model.trim="importUrl" :disabled="importing || running"
-               placeholder="粘贴漫画网页链接，例如 https://nhentai.net/g/123456/" @keydown.enter="importFromUrl">
+               placeholder="粘贴漫画网页链接，自动下载并翻译" @keydown.enter="importFromUrl">
         <label class="check check-small" title="下载完成后立即开始翻译">
           <input type="checkbox" v-model="options.autoTranslate"> 自动翻译
         </label>
@@ -63,7 +144,11 @@
         <div class="progress" v-if="importJob.status === 'downloading'"><div :style="{ width: (importJob.total ? importJob.downloaded / importJob.total * 100 : 0) + '%' }"></div></div>
       </div>
 
-      <div v-if="!pages.length" class="dropzone" :class="{ active: dragging }" @click="pickFiles">
+      <div v-if="!pages.length" class="dropzone glass" :class="{ active: dragging }" @click="pickFiles">
+        <div class="dz-island only-island" aria-hidden="true">
+          <svg class="dz-mascot"><use href="#mascot"/></svg>
+          <div class="dz-say">喵～交给我翻译吧！</div>
+        </div>
         <svg class="dz-art" viewBox="0 0 160 120" aria-hidden="true">
           <rect x="38" y="14" width="64" height="88" rx="6" class="dz-page back"/>
           <rect x="54" y="20" width="64" height="88" rx="6" class="dz-page"/>
@@ -83,7 +168,7 @@
       <template v-else>
         <div class="toolbar">
           <div class="summary">
-            <div class="summary-title">{{ folderName }}</div>
+            <div class="summary-title" :title="folderName">{{ folderName }}</div>
             <div class="summary-meta">
               共 {{ pages.length }} 页
               <template v-if="counts.done"> · 已完成 {{ counts.done }}</template>
@@ -98,22 +183,40 @@
             <a class="btn" :class="{ disabled: !counts.done }" :href="zipUrl" download>下载全部</a>
           </div>
         </div>
-        <div class="overall"><div class="overall-bar" :style="{ width: overallProgress + '%' }"></div></div>
+        <div class="overall"><div class="overall-bar" :class="{ empty: !overallProgress }" :style="{ width: overallProgress + '%' }"></div></div>
+        <div class="viewbar">
+          <div class="segmented segmented-small">
+            <button :class="{ on: filter === 'all' }" @click="filter = 'all'">全部 {{ pages.length }}</button>
+            <button :class="{ on: filter === 'pending' }" :disabled="!pendingCount" @click="filter = 'pending'">未完成 {{ pendingCount }}</button>
+            <button :class="{ on: filter === 'error' }" :disabled="!counts.error" @click="filter = 'error'">失败 {{ counts.error }}</button>
+          </div>
+          <div class="viewbar-right">
+            <button class="btn btn-ghost btn-small" v-if="running" @click="scrollToRunning">定位到当前页</button>
+            <div class="segmented segmented-small" title="缩略图大小">
+              <button v-for="s in thumbSizes" :key="s.value" :class="{ on: options.thumb === s.value }"
+                      @click="options.thumb = s.value">{{ s.label }}</button>
+            </div>
+          </div>
+        </div>
 
-        <div class="grid" :class="{ active: dragging }">
-          <article v-for="(p, i) in pages" :key="p.id" class="card" :class="'is-' + p.status"
-                   @click="openViewer(i)">
+        <div class="grid-scroll" ref="gridScroll">
+        <div class="grid" :class="['thumb-' + options.thumb, { active: dragging }]">
+          <div class="grid-empty" v-if="!visiblePages.length">没有符合条件的页面</div>
+          <article v-for="({ p, i }, n) in visiblePages" :key="p.id" class="card" :class="'is-' + p.status"
+                   :data-index="i" :style="{ '--d': Math.min(n, 24) }" @click="openViewer(i)">
             <div class="thumb">
-              <img :src="p.resultUrl || p.srcUrl" :alt="p.name" loading="lazy">
-              <span class="badge" v-if="p.status === 'done'">已翻译</span>
+              <img :src="p.srcUrl" :alt="p.name" loading="lazy">
+              <img v-if="p.resultUrl" :key="p.resultUrl" :src="p.resultUrl" class="thumb-result" alt="">
+              <span class="tick" v-if="p.status === 'done'" title="已翻译">✓</span>
               <span class="badge badge-muted" v-else-if="p.status === 'skipped'">无文字</span>
+              <span class="badge badge-error" v-else-if="p.status === 'error'">失败</span>
               <div class="card-overlay" v-if="p.status === 'running'">
                 <div class="spinner"></div>
                 <div>{{ p.stageText }}</div>
               </div>
             </div>
             <div class="card-body">
-              <div class="card-name" :title="p.name">{{ i + 1 }}. {{ p.name }}</div>
+              <div class="card-name" :title="p.name">第 {{ i + 1 }} 页</div>
               <div class="card-status">
                 <span v-if="p.status === 'queued'">等待中</span>
                 <span v-else-if="p.status === 'running'">{{ p.stageText }}</span>
@@ -130,12 +233,22 @@
             </div>
           </article>
         </div>
+        </div>
       </template>
     </section>
 
     <!-- 右侧：设置 -->
     <aside class="sidebar">
-      <div class="panel">
+      <div class="sidebar-scroll">
+      <div class="panel glass">
+        <div class="panel-title">当前作品</div>
+        <label class="field">
+          <span>作品名称</span>
+          <input type="text" v-model.trim="folderName" :disabled="running" placeholder="例如：第 1 话">
+        </label>
+      </div>
+
+      <div class="panel glass">
         <div class="panel-title">翻译设置</div>
 
         <label class="field">
@@ -201,22 +314,21 @@
         </details>
       </div>
 
-      <div class="panel">
-        <div class="panel-title">保存位置</div>
-        <label class="field">
-          <span>作品名称</span>
-          <input type="text" v-model.trim="folderName" :disabled="running" placeholder="例如：第 1 话">
-        </label>
-        <small class="path" :title="outputPath">翻译好的图片会自动保存到<br>{{ outputPath }}</small>
       </div>
 
-      <button class="btn btn-accent btn-big" v-if="!running" :disabled="!canStart" @click="start">
-        {{ startLabel }}
-      </button>
-      <button class="btn btn-big btn-stop" v-else @click="stop">
-        {{ stopping ? '正在停止…' : '停止' }}
-      </button>
-      <div class="start-hint" v-if="startHint">{{ startHint }}</div>
+      <div class="sidebar-foot glass">
+        <div class="foot-progress" v-if="running">
+          <span>{{ counts.done }} / {{ pages.length }}</span>
+          <span>{{ etaText || '计算剩余时间…' }}</span>
+        </div>
+        <button class="btn btn-accent btn-big" v-if="!running" :disabled="!canStart" @click="start">
+          {{ startLabel }}
+        </button>
+        <button class="btn btn-big btn-stop" v-else @click="stop">
+          {{ stopping ? '正在停止…' : '停止' }}
+        </button>
+        <div class="start-hint" v-if="startHint">{{ startHint }}</div>
+      </div>
     </aside>
   </main>
 
@@ -236,27 +348,57 @@
     </div>
     <button class="nav nav-prev" :disabled="viewer.index === 0" @click="step(-1)">‹</button>
     <div class="stage" ref="stage">
-      <div class="frame" v-if="viewer.mode === 'compare' && current.resultUrl"
+      <transition name="swap" mode="out-in">
+      <div class="frame" v-if="viewer.mode === 'compare' && current.resultUrl" :key="'c' + viewer.index"
            @pointerdown="dragSplit" :style="{ '--split': viewer.split + '%' }">
         <img :src="current.resultUrl" draggable="false">
         <img :src="current.srcUrl" class="clip" draggable="false">
         <div class="divider"><span>原图 ⟷ 译图</span></div>
       </div>
-      <div class="frame" v-else>
+      <div class="frame" v-else :key="viewer.mode + viewer.index">
         <img :src="viewer.mode === 'result' && current.resultUrl ? current.resultUrl : current.srcUrl" draggable="false">
       </div>
+      </transition>
     </div>
     <button class="nav nav-next" :disabled="viewer.index === pages.length - 1" @click="step(1)">›</button>
   </div>
 
   <!-- 设置 -->
   <div class="modal-mask" v-if="settings.open" @click.self="settings.open = false">
-    <div class="modal">
+    <div class="modal glass">
       <div class="modal-head">
         <div class="modal-title">设置</div>
         <button class="icon-btn" @click="settings.open = false">✕</button>
       </div>
       <div class="modal-body">
+        <div class="modal-section">常规<small>立即生效</small></div>
+        <div class="field">
+          <span>界面主题</span>
+          <div class="segmented">
+            <button :class="{ on: theme === 'island' }" @click="theme = 'island'">森林小岛</button>
+            <button :class="{ on: theme === 'comic' }" @click="theme = 'comic'">漫画卡通</button>
+          </div>
+        </div>
+        <div class="field">
+          <span>外观</span>
+          <div class="segmented">
+            <button :class="{ on: mode === 'light' }" @click="mode = 'light'">白天</button>
+            <button :class="{ on: mode === 'dark' }" @click="mode = 'dark'">夜间</button>
+            <button :class="{ on: mode === 'auto' }" @click="mode = 'auto'">跟随系统</button>
+          </div>
+        </div>
+        <div class="field">
+          <span>保存位置</span>
+          <div class="path-box" :title="status.output_root">{{ status.output_root || '…' }}</div>
+          <div class="path-actions">
+            <button class="btn btn-small" :disabled="settings.picking" @click="pickOutputRoot">{{ settings.picking ? '请在弹出的窗口中选择…' : '选择文件夹…' }}</button>
+            <button class="btn btn-small btn-ghost" @click="openFolderRoot">打开</button>
+            <button class="btn btn-small btn-ghost" v-if="status.output_root && status.output_root !== status.output_root_default" @click="resetOutputRoot">恢复默认</button>
+          </div>
+          <small>每部作品会在这里新建一个以作品名称命名的子文件夹。</small>
+        </div>
+
+        <div class="modal-section">DeepSeek 翻译<small>保存后生效</small></div>
         <label class="field">
           <span>DeepSeek API Key
             <b class="pill" :class="status.deepseek_key_set ? 'pill-ok' : 'pill-warn'">{{ status.deepseek_key_set ? '已设置' : '未设置' }}</b>
@@ -280,7 +422,7 @@
         </div>
       </div>
       <div class="modal-foot">
-        <small>保存后翻译引擎会自动重启，约需 30 秒。</small>
+        <small>保存 DeepSeek 设置后，翻译引擎会自动重启（约 30 秒）。</small>
         <button class="btn btn-accent" :disabled="settings.saving || running" @click="saveSettings">
           {{ settings.saving ? '保存中…' : '保存' }}
         </button>
@@ -289,8 +431,20 @@
   </div>
 
   <!-- 提示 -->
-  <div class="toasts">
+  <transition-group name="toast" tag="div" class="toasts">
     <div v-for="t in toasts" :key="t.id" class="toast" :class="'toast-' + t.type">{{ t.text }}</div>
+  </transition-group>
+
+  <!-- 全部完成时盖章 -->
+  <div class="stamp" v-if="stamp" aria-hidden="true">
+    <div class="stamp-ring"></div>
+    <div class="stamp-seal">译</div>
+    <div class="stamp-burst"></div>
+    <svg class="stamp-mascot only-island"><use href="#mascot"/></svg>
+    <div class="leaves only-island">
+      <svg v-for="n in 14" :key="n" :style="{ '--n': n }"><use href="#leaf"/></svg>
+    </div>
+    <div class="stamp-text">全部完成</div>
   </div>
 
   <input ref="fileInput" type="file" accept="image/png,image/jpeg,image/webp,image/bmp" multiple hidden @change="onPick">

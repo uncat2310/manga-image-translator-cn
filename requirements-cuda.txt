@@ -1,0 +1,10 @@
+# For NVIDIA GPUs (CUDA) on Windows / Linux.
+# PyPI's Windows torch wheels are CPU-only, so pull torch/torchvision from the CUDA index.
+# cu130 covers RTX 20/30/40/50 series and needs NVIDIA driver 580 or newer.
+# For GTX 10/16 series (or an older driver) change cu130 to cu126.
+
+--extra-index-url https://download.pytorch.org/whl/cu130
+-r requirements.txt
+
+torch
+torchvision

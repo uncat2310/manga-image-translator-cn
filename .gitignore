@@ -65,3 +65,6 @@ Thumbs.db
 
 # 本机虚拟环境位置（启动翻译工作台.bat 读取）
 .venv-path
+
+# 工作台本地设置（保存位置等）
+studio-settings.json

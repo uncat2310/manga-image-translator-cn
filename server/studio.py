@@ -24,7 +24,8 @@ from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent / 'studio_web'
-OUTPUT_ROOT = ROOT / 'output'
+DEFAULT_OUTPUT_ROOT = ROOT / 'output'
+SETTINGS_FILE = ROOT / 'studio-settings.json'
 ENV_FILE = ROOT / '.env'
 
 DEEPSEEK_MODELS = ['deepseek-flash', 'deepseek-v4-pro']
@@ -90,9 +91,28 @@ def _safe_name(name: str, fallback: str) -> str:
     return name[:120] or fallback
 
 
+def _load_settings() -> dict:
+    import json
+    try:
+        return json.loads(SETTINGS_FILE.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_settings(data: dict):
+    import json
+    SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
+def output_root() -> Path:
+    custom = _load_settings().get('output_root')
+    return Path(custom) if custom else DEFAULT_OUTPUT_ROOT
+
+
 def _folder(name: str) -> Path:
-    path = (OUTPUT_ROOT / _safe_name(name, 'untitled')).resolve()
-    if OUTPUT_ROOT.resolve() not in path.parents:
+    root = output_root().resolve()
+    path = (root / _safe_name(name, 'untitled')).resolve()
+    if root not in path.parents:
         raise HTTPException(400, detail='Invalid folder')
     return path
 
@@ -157,7 +177,8 @@ async def status():
         'deepseek_model': env.get('DEEPSEEK_MODEL') or 'deepseek-flash',
         'deepseek_models': DEEPSEEK_MODELS,
         'queue': len(task_queue.queue),
-        'output_root': str(OUTPUT_ROOT),
+        'output_root': str(output_root()),
+        'output_root_default': str(DEFAULT_OUTPUT_ROOT),
     }
 
 
@@ -202,10 +223,59 @@ class FolderBody(BaseModel):
     folder: Optional[str] = None
 
 
+class OutputRootBody(BaseModel):
+    path: Optional[str] = None  # None 表示恢复默认
+
+
+@router.post('/api/output-root')
+async def set_output_root(body: OutputRootBody, request: Request):
+    _check_origin(request)
+    data = _load_settings()
+    if body.path:
+        target = Path(body.path).expanduser()
+        if not target.is_absolute():
+            raise HTTPException(400, detail='请选择一个完整的文件夹路径')
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            probe = target / '.write-test'
+            probe.write_bytes(b'')
+            probe.unlink()
+        except OSError:
+            raise HTTPException(400, detail='这个文件夹无法写入，请换一个')
+        data['output_root'] = str(target.resolve())
+    else:
+        data.pop('output_root', None)
+    _save_settings(data)
+    return {'output_root': str(output_root())}
+
+
+def _ask_directory(initial: str) -> Optional[str]:
+    import tkinter
+    from tkinter import filedialog
+    root = tkinter.Tk()
+    root.withdraw()
+    root.attributes('-topmost', True)
+    try:
+        return filedialog.askdirectory(parent=root, initialdir=initial, title='选择翻译结果的保存位置') or None
+    finally:
+        root.destroy()
+
+
+@router.post('/api/pick-folder')
+async def pick_folder(request: Request):
+    _check_origin(request)
+    import asyncio
+    try:
+        path = await asyncio.to_thread(_ask_directory, str(output_root()))
+    except Exception:  # noqa: BLE001 - no GUI available
+        raise HTTPException(501, detail='无法打开文件夹选择窗口，请直接粘贴路径')
+    return {'path': str(Path(path)) if path else None}
+
+
 @router.post('/api/open-folder')
 async def open_folder(body: FolderBody, request: Request):
     _check_origin(request)
-    target = _folder(body.folder) if body.folder else OUTPUT_ROOT
+    target = _folder(body.folder) if body.folder else output_root()
     target.mkdir(parents=True, exist_ok=True)
     if sys.platform == 'win32':
         os.startfile(target)

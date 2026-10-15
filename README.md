@@ -79,7 +79,8 @@ python -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
 
 # 按硬件选一个：
-pip install -r requirements.txt       # NVIDIA GPU / CPU
+pip install -r requirements-cuda.txt  # NVIDIA 显卡（RTX 20–50 系列，驱动需 580 以上）
+pip install -r requirements.txt       # 只用 CPU
 pip install -r requirements-xpu.txt   # Intel Arc 独显/核显（XPU）
 pip install -r requirements-rocm.txt  # AMD GPU (ROCm)
 ```

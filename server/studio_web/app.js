@@ -21,8 +21,7 @@ const STAGES = {
 };
 
 const LANGUAGES = [
-  ['CHS', '简体中文'], ['CHT', '繁体中文'], ['ENG', '英语'], ['JPN', '日语'], ['KOR', '韩语'],
-  ['FRA', '法语'], ['DEU', '德语'], ['ESP', '西班牙语'], ['RUS', '俄语'], ['VIN', '越南语'], ['THA', '泰语'],
+  ['CHS', '简体中文'], ['CHT', '繁体中文'], ['JPN', '日语'], ['KOR', '韩语'], ['ENG', '英语'],
 ].map(([code, name]) => ({ code, name }));
 
 const QUALITY = {
@@ -33,13 +32,15 @@ const QUALITY = {
 
 const DEFAULT_OPTIONS = {
   translator: 'deepseek', targetLang: 'CHS', direction: 'auto', quality: 'standard',
-  fontOffset: 0, inpainter: 'lama_large', ocr: '48px', noBorder: false, autoTranslate: true,
+  fontOffset: 0, inpainter: 'lama_large', ocr: '48px', noBorder: false, autoTranslate: true, thumb: 'm',
 };
 
 function loadOptions() {
-  try {
-    return { ...DEFAULT_OPTIONS, ...JSON.parse(localStorage.getItem(STORE_KEY) || '{}') };
-  } catch { return { ...DEFAULT_OPTIONS }; }
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch {}
+  const opts = { ...DEFAULT_OPTIONS, ...saved };
+  if (!LANGUAGES.some((l) => l.code === opts.targetLang)) opts.targetLang = DEFAULT_OPTIONS.targetLang;
+  return opts;
 }
 
 function todayName() {
@@ -109,8 +110,41 @@ createApp({
     const dragging = ref(false);
     const toasts = reactive([]);
     const viewer = reactive({ open: false, index: 0, mode: 'compare', split: 50 });
-    const settings = reactive({ open: false, key: '', showKey: false, model: 'deepseek-flash', saving: false });
-    const fileInput = ref(null), folderInput = ref(null), stage = ref(null);
+    const settings = reactive({ open: false, key: '', showKey: false, model: 'deepseek-flash', saving: false, picking: false });
+    const fileInput = ref(null), folderInput = ref(null), stage = ref(null), gridScroll = ref(null);
+    const filter = ref('all');
+    const stamp = ref(false);
+    const theme = ref(document.documentElement.dataset.theme === 'comic' ? 'comic' : 'island');
+    const mode = ref(['light', 'dark'].includes(document.documentElement.dataset.mode) ? document.documentElement.dataset.mode : 'auto');
+    const darkQuery = matchMedia('(prefers-color-scheme: dark)');
+    function applyScheme() {
+      document.documentElement.dataset.mode = mode.value;
+      document.documentElement.dataset.scheme = mode.value === 'auto' ? (darkQuery.matches ? 'dark' : 'light') : mode.value;
+    }
+    watch(mode, (m) => {
+      applyScheme();
+      try { localStorage.setItem('mit-studio-mode', m); } catch {}
+    });
+    darkQuery.addEventListener('change', applyScheme);
+    const MODES = { light: '白天', dark: '夜间', auto: '跟随系统' };
+    const modeLabel = computed(() => MODES[mode.value]);
+    function cycleMode() {
+      mode.value = mode.value === 'light' ? 'dark' : mode.value === 'dark' ? 'auto' : 'light';
+      toast('外观：' + modeLabel.value);
+    }
+    const clock = reactive({ week: '', date: '', time: '' });
+    function tick() {
+      const d = new Date(), p = (n) => String(n).padStart(2, '0');
+      clock.week = '星期' + '日一二三四五六'[d.getDay()];
+      clock.date = `${d.getMonth() + 1}月${d.getDate()}日`;
+      clock.time = `${p(d.getHours())}:${p(d.getMinutes())}`;
+    }
+    tick();
+    setInterval(tick, 10000);
+    watch(theme, (t) => {
+      document.documentElement.dataset.theme = t;
+      try { localStorage.setItem('mit-studio-theme', t); } catch {}
+    });
     const importUrl = ref('');
     const importJob = ref(null);
     const importing = computed(() => !!importJob.value && importJob.value.status !== 'error');
@@ -292,7 +326,11 @@ createApp({
         const failed = counts.value.error;
         if (stopping.value) toast('已停止');
         else if (failed) toast(`完成，但有 ${failed} 页失败，可点卡片右上角 ↻ 重试`, 'error', 6000);
-        else if (finishedInRun) toast(`全部完成！已保存到「${folderName.value}」`, 'ok', 5000);
+        else if (finishedInRun) {
+          toast(`全部完成！已保存到「${folderName.value}」`, 'ok', 5000);
+          stamp.value = true;
+          setTimeout(() => { stamp.value = false; }, theme.value === 'island' ? 2600 : 1600);
+        }
         stopping.value = false;
       }
     }
@@ -380,6 +418,39 @@ createApp({
       }
     }
 
+    /* ---------- 保存位置 ---------- */
+    async function setOutputRoot(path) {
+      const r = await fetch('/studio/api/output-root', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || '设置失败');
+      status.output_root = data.output_root;
+      toast(path ? '保存位置已更新' : '已恢复默认保存位置', 'ok');
+    }
+    async function pickOutputRoot() {
+      settings.picking = true;
+      try {
+        const r = await fetch('/studio/api/pick-folder', { method: 'POST' });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.detail || '无法打开选择窗口');
+        if (data.path) await setOutputRoot(data.path);
+      } catch (err) {
+        toast(String(err.message || err), 'error');
+      } finally {
+        settings.picking = false;
+      }
+    }
+    async function resetOutputRoot() {
+      try { await setOutputRoot(null); } catch (err) { toast(String(err.message || err), 'error'); }
+    }
+    async function openFolderRoot() {
+      const r = await fetch('/studio/api/open-folder', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+      });
+      if (!r.ok) toast('打开文件夹失败', 'error');
+    }
+
     /* ---------- 派生状态 ---------- */
     const counts = computed(() => {
       const c = { queued: 0, running: 0, done: 0, skipped: 0, error: 0 };
@@ -400,6 +471,23 @@ createApp({
       return sec >= 60 ? `预计还需 ${Math.ceil(sec / 60)} 分钟` : `预计还需 ${sec} 秒`;
     });
     const pending = computed(() => counts.value.queued + counts.value.error);
+    const pendingCount = computed(() => counts.value.queued + counts.value.running + counts.value.error);
+    const visiblePages = computed(() => pages.map((p, i) => ({ p, i })).filter(({ p }) =>
+      filter.value === 'all' ? true
+        : filter.value === 'error' ? p.status === 'error'
+        : p.status !== 'done' && p.status !== 'skipped'));
+    watch([() => counts.value.error, pendingCount], ([err, pend]) => {
+      if ((filter.value === 'error' && !err) || (filter.value === 'pending' && !pend)) filter.value = 'all';
+    });
+    function scrollToRunning() {
+      const i = pages.findIndex((p) => p.status === 'running');
+      if (i < 0 || !gridScroll.value) return;
+      filter.value = 'all';
+      nextTick(() => {
+        const el = gridScroll.value.querySelector(`[data-index="${i}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
     const canStart = computed(() => pending.value > 0 && status.engine_ready);
     const startLabel = computed(() => {
       if (!pages.length) return '开始翻译';
@@ -437,13 +525,15 @@ createApp({
 
     return {
       pages, options, folderName, status, running, stopping, dragging, toasts, viewer, settings,
-      fileInput, folderInput, stage, importUrl, importJob, importing, importFromUrl, current, counts, overallProgress, etaText, canStart, startLabel, startHint,
+      fileInput, folderInput, stage, gridScroll, filter, stamp, theme, clock, mode, modeLabel, cycleMode, pendingCount, visiblePages, scrollToRunning, importUrl, importJob, importing, importFromUrl, current, counts, overallProgress, etaText, canStart, startLabel, startHint,
       engineChip, qualityHint, outputPath, zipUrl,
       languages: LANGUAGES,
+      thumbSizes: [{ value: 's', label: '小' }, { value: 'm', label: '中' }, { value: 'l', label: '大' }],
       directions: [{ value: 'auto', label: '自动' }, { value: 'vertical', label: '竖排' }, { value: 'horizontal', label: '横排' }],
       qualities: Object.entries(QUALITY).map(([value, q]) => ({ value, label: q.label, hint: q.hint })),
       onDrop, onPick, pickFiles, pickFolder, removePage, clearAll, start, stop, retry, openFolder,
       openViewer, closeViewer, step, dragSplit, downloadName, openSettings, saveSettings,
+      pickOutputRoot, resetOutputRoot, openFolderRoot,
     };
   },
 }).mount('#app');
