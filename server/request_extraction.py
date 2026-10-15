@@ -31,21 +31,29 @@ class BatchTranslateRequest(BaseModel):
     batch_size: int = 4
     """Batch size, default is 4"""
 
+def _plain_info(image: Image.Image) -> Image.Image:
+    # The image is pickled for the translator instance, whose unpickler only accepts a few
+    # modules. JPEG EXIF/Photoshop metadata can hold other types (e.g. dpi as IFDRational),
+    # which made every such page fail with 500; translation does not need them.
+    image.info = {k: v for k, v in image.info.items() if isinstance(v, (str, bytes, int, float))}
+    return image
+
+
 async def to_pil_image(image: Union[str, bytes]) -> Image.Image:
     try:
         if isinstance(image, builtins.bytes):
             image = Image.open(io.BytesIO(image))
-            return image
+            return _plain_info(image)
         else:
             if re.match(r'^data:image/.+;base64,', image):
                 value = image.split(',', 1)[1]
                 image_data = b64decode(value)
                 image = Image.open(io.BytesIO(image_data))
-                return image
+                return _plain_info(image)
             else:
                 response = requests.get(image)
                 image = Image.open(io.BytesIO(response.content))
-                return image
+                return _plain_info(image)
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
 
