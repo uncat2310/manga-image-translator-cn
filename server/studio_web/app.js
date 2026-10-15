@@ -147,8 +147,8 @@ createApp({
     });
     const importUrl = ref('');
     const imports = reactive([]);
-    const sites = reactive({ pixiv: false });
-    const pixiv = reactive({ open: false, step: 1, code: '', token: '', busy: false });
+    const sites = reactive({ pixiv: false, pixiv_mode: null });
+    const pixiv = reactive({ open: false, step: 1, code: '', token: '', cookie: '', busy: false });
     let abort = null, nextId = 1, statusTimer = null, startedAt = 0, finishedInRun = 0, importBusy = false;
 
     watch(options, (v) => { try { localStorage.setItem(STORE_KEY, JSON.stringify(v)); } catch {} }, { deep: true });
@@ -515,6 +515,17 @@ createApp({
         toast('Pixiv 授权成功', 'ok');
       } catch (err) { toast(String(err.message || err), 'error'); } finally { pixiv.busy = false; }
     }
+    async function pixivSaveCookie() {
+      if (!pixiv.cookie.trim()) return;
+      pixiv.busy = true;
+      try {
+        await postJson('/studio/api/pixiv/cookie', { cookie: pixiv.cookie });
+        Object.assign(pixiv, { open: false, cookie: '' });
+        await refreshSites();
+        toast('Pixiv Cookie 已保存', 'ok');
+        imports.forEach((j) => { if (j.status === 'error' && /Pixiv/.test(j.error)) retryImport(j); });
+      } catch (err) { toast(String(err.message || err), 'error'); } finally { pixiv.busy = false; }
+    }
     async function pixivRemove() {
       try { await postJson('/studio/api/pixiv/token', { token: null }); await refreshSites(); toast('已移除 Pixiv 授权'); }
       catch (err) { toast(String(err.message || err), 'error'); }
@@ -642,7 +653,7 @@ createApp({
 
     return {
       pages, options, folderName, status, running, stopping, dragging, toasts, viewer, settings,
-      fileInput, folderInput, stage, gridScroll, filter, stamp, theme, clock, mode, modeLabel, cycleMode, pendingCount, visiblePages, scrollToRunning, importUrl, imports, importActive, importFromUrl, importText, retryImport, removeImport, groups, groupOf, summaryTitle, zipHref, sites, pixiv, pixivOpenLogin, pixivFinish, pixivSaveToken, pixivRemove, current, counts, overallProgress, etaText, canStart, startLabel, startHint,
+      fileInput, folderInput, stage, gridScroll, filter, stamp, theme, clock, mode, modeLabel, cycleMode, pendingCount, visiblePages, scrollToRunning, importUrl, imports, importActive, importFromUrl, importText, retryImport, removeImport, groups, groupOf, summaryTitle, zipHref, sites, pixiv, pixivOpenLogin, pixivFinish, pixivSaveToken, pixivSaveCookie, pixivRemove, current, counts, overallProgress, etaText, canStart, startLabel, startHint,
       engineChip, qualityHint, outputPath, zipUrl,
       languages: LANGUAGES,
       thumbSizes: [{ value: 's', label: '小' }, { value: 'm', label: '中' }, { value: 'l', label: '大' }],

@@ -330,7 +330,7 @@ def _gallery_dl(*args, timeout=None) -> subprocess.CompletedProcess:
 def _friendly_gdl_error(message: str) -> str:
     low = message.lower()
     if 'refresh-token' in low and 'pixiv' in (low + ' pixiv'):
-        return 'Pixiv 需要先授权：请到右上角「设置 → 网站账号」里授权 Pixiv 后再试'
+        return 'Pixiv 需要登录：请到右上角「设置 → 网站账号」填写 Pixiv Cookie 后再试'
     if 'unsupported url' in low or 'no suitable extractor' in low:
         return '暂不支持这个网站的链接'
     if '404' in low or 'not found' in low:
@@ -346,9 +346,15 @@ def _last_error(proc: subprocess.CompletedProcess) -> str:
     return errors[-1][:300] if errors else f'gallery-dl 退出码 {proc.returncode}'
 
 
+_PIXIV_WORK = re.compile(r'pixiv\.net/(?:[a-z]{2}/)?(?:artworks/|member_illust\.php\?(?:[^#]*&)?illust_id=)(\d+)')
+
+
 def _run_import(job: dict):
     import json
     url = job['url']
+    pixiv_work = _PIXIV_WORK.search(url)
+    if pixiv_work and not _pixiv_token():
+        return _run_pixiv_web_import(job, pixiv_work.group(1))
     try:
         probe = _gallery_dl('-j', url, timeout=120)
         try:
@@ -383,6 +389,57 @@ def _run_import(job: dict):
         job.update(files=names, status='done')
     except subprocess.TimeoutExpired:
         job.update(status='error', error='下载超时')
+    except Exception as e:  # noqa: BLE001 - reported to the page
+        job.update(status='error', error=str(e))
+
+
+def _run_pixiv_web_import(job: dict, illust_id: str):
+    """Download a Pixiv work through the website's own ajax API (optionally with the PHPSESSID cookie)."""
+    import requests
+    cookie = _pixiv_cookie()
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) '
+                      'Chrome/130.0.0.0 Safari/537.36',
+        'Referer': f'https://www.pixiv.net/artworks/{illust_id}',
+        'Accept-Language': 'zh-CN,zh;q=0.9,ja;q=0.8',
+    })
+    if cookie:
+        session.cookies.set('PHPSESSID', cookie, domain='.pixiv.net')
+    need_login = 'Pixiv 需要登录才能查看这个作品：请到右上角「设置 → 网站账号」填写 Pixiv Cookie 后再试'
+
+    def ajax(path):
+        data = session.get(f'https://www.pixiv.net/ajax{path}', timeout=30).json()
+        if data.get('error'):
+            raise RuntimeError(need_login if not cookie else f'Pixiv 返回错误：{data.get("message") or "未知错误"}')
+        return data['body']
+
+    try:
+        info = ajax(f'/illust/{illust_id}')
+        if info.get('illustType') == 2:
+            raise RuntimeError('暂不支持 Pixiv 动图（ugoira）')
+        urls = [p.get('urls', {}).get('original') for p in ajax(f'/illust/{illust_id}/pages')]
+        if not urls or not all(urls):
+            raise RuntimeError(need_login if not cookie else 'Cookie 可能已失效，请重新复制 PHPSESSID')
+        author = info.get('userName') or ''
+        title = info.get('illustTitle') or illust_id
+        job.update(title=_safe_name(f'[{author}] {title}' if author else title, illust_id),
+                   total=len(urls), status='downloading')
+        target = DOWNLOAD_ROOT / job['title']
+        target.mkdir(parents=True, exist_ok=True)
+        job['dir'] = target
+        names = []
+        for i, u in enumerate(urls, 1):
+            name = f'{illust_id}_p{i:03d}{Path(urlparse(u).path).suffix or ".jpg"}'
+            path = target / name
+            if not path.exists():
+                r = session.get(u, headers={'Referer': 'https://www.pixiv.net/'}, timeout=120)
+                r.raise_for_status()
+                path.write_bytes(r.content)
+            names.append(name)
+        job.update(files=names, status='done')
+    except requests.RequestException as e:
+        job.update(status='error', error=f'连接 Pixiv 失败：{e}')
     except Exception as e:  # noqa: BLE001 - reported to the page
         job.update(status='error', error=str(e))
 
@@ -460,9 +517,41 @@ def _set_pixiv_token(token: Optional[str]):
     _write_gdl_config(data)
 
 
+def _pixiv_cookie() -> Optional[str]:
+    cookies = _read_gdl_config().get('extractor', {}).get('pixiv', {}).get('cookies') or {}
+    return cookies.get('PHPSESSID') if isinstance(cookies, dict) else None
+
+
+def _set_pixiv_cookie(value: Optional[str]):
+    data = _read_gdl_config()
+    pixiv = data.setdefault('extractor', {}).setdefault('pixiv', {})
+    if value:
+        pixiv['cookies'] = {'PHPSESSID': value}
+    else:
+        pixiv.pop('cookies', None)
+    _write_gdl_config(data)
+
+
 @router.get('/api/sites')
 async def sites_status():
-    return {'pixiv': bool(_pixiv_token())}
+    token, cookie = bool(_pixiv_token()), bool(_pixiv_cookie())
+    return {'pixiv': token or cookie, 'pixiv_mode': 'token' if token else 'cookie' if cookie else None}
+
+
+class PixivCookieBody(BaseModel):
+    cookie: Optional[str] = None
+
+
+@router.post('/api/pixiv/cookie')
+async def pixiv_cookie(body: PixivCookieBody, request: Request):
+    _check_origin(request)
+    value = (body.cookie or '').strip().strip(';').strip()
+    if value.upper().startswith('PHPSESSID='):
+        value = value.split('=', 1)[1].strip()
+    if value and not re.fullmatch(r'[A-Za-z0-9_]{10,128}', value):
+        raise HTTPException(400, detail='PHPSESSID 格式不正确，只需要复制它的「值」')
+    _set_pixiv_cookie(value or None)
+    return {'pixiv': bool(value or _pixiv_token())}
 
 
 @router.post('/api/pixiv/start')
@@ -537,7 +626,9 @@ async def pixiv_token(body: PixivTokenBody, request: Request):
     if token and not re.fullmatch(r'[A-Za-z0-9_\-]{20,200}', token):
         raise HTTPException(400, detail='refresh token 格式不正确')
     _set_pixiv_token(token or None)
-    return {'pixiv': bool(token)}
+    if not token:
+        _set_pixiv_cookie(None)
+    return {'pixiv': bool(token or _pixiv_cookie())}
 
 
 def mount(app):

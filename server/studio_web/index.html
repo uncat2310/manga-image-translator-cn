@@ -422,34 +422,44 @@
         <div class="modal-section">网站账号<small>用于下载需要登录的网站</small></div>
         <div class="site-row">
           <div class="site-name"><b>Pixiv</b>
-            <span class="pill" :class="sites.pixiv ? 'pill-ok' : 'pill-warn'">{{ sites.pixiv ? '已授权' : '未授权' }}</span>
+            <span class="pill" :class="sites.pixiv ? 'pill-ok' : 'pill-warn'">{{ sites.pixiv_mode === 'cookie' ? '已填 Cookie' : sites.pixiv ? '已授权' : '未登录' }}</span>
           </div>
           <div class="site-actions">
-            <button class="btn btn-small" @click="pixiv.open = !pixiv.open; pixiv.step = 1">{{ sites.pixiv ? '重新授权' : '授权' }}</button>
+            <button class="btn btn-small" @click="pixiv.open = !pixiv.open; pixiv.step = 1">{{ sites.pixiv ? '更新' : '登录' }}</button>
             <button class="btn btn-small btn-ghost" v-if="sites.pixiv" @click="pixivRemove">移除</button>
           </div>
         </div>
         <div class="pixiv-flow" v-if="pixiv.open">
+          <div class="flow-note">普通作品不登录也能下载；R-18 或需要登录才能看的作品，填一次 Cookie 即可。</div>
           <ol>
-            <li :class="{ done: pixiv.step > 1 }">
-              <b>打开登录页</b>
-              <button class="btn btn-small btn-accent" :disabled="pixiv.busy" @click="pixivOpenLogin">打开 Pixiv 登录页</button>
-            </li>
-            <li>在新打开的页面按 <kbd>F12</kbd>，切到「<b>网络 / Network</b>」标签，然后登录 Pixiv。</li>
-            <li>登录后在网络列表最下面找到 <code>callback?state=…</code>，右键复制它的网址，<b>30 秒内</b>粘贴到下面：</li>
+            <li>在浏览器打开 <a href="https://www.pixiv.net/" target="_blank" rel="noopener">pixiv.net</a> 并保持登录状态。</li>
+            <li>按 <kbd>F12</kbd>，顶部切到「<b>应用 / Application</b>」（找不到就点 <kbd>»</kbd> 展开）。</li>
+            <li>左侧展开「<b>Cookie</b>」，点 <code>https://www.pixiv.net</code>。</li>
+            <li>在右侧列表找到名称为 <code>PHPSESSID</code> 的一行，双击它的「<b>值 / Value</b>」全选并复制，粘贴到下面：</li>
           </ol>
           <div class="input-group">
-            <input type="text" v-model.trim="pixiv.code" placeholder="粘贴 callback 网址或其中的 code" autocomplete="off" spellcheck="false" @keydown.enter="pixivFinish">
-            <button class="btn btn-accent" :disabled="!pixiv.code || pixiv.busy" @click="pixivFinish">{{ pixiv.busy ? '授权中…' : '完成授权' }}</button>
+            <input type="password" v-model.trim="pixiv.cookie" placeholder="粘贴 PHPSESSID 的值（形如 12345678_xxxxxxxx）" autocomplete="off" spellcheck="false" @keydown.enter="pixivSaveCookie">
+            <button class="btn btn-accent" :disabled="!pixiv.cookie || pixiv.busy" @click="pixivSaveCookie">保存</button>
           </div>
           <details class="pixiv-token">
-            <summary>已经有 refresh token？</summary>
+            <summary>其他方式：App 授权 / refresh token</summary>
+            <ol>
+              <li>
+                <button class="btn btn-small" :disabled="pixiv.busy" @click="pixivOpenLogin">打开 Pixiv 登录页</button>
+              </li>
+              <li>在<b>刚打开的这个页面</b>按 <kbd>F12</kbd> →「网络 / Network」，勾选「保留日志 / Preserve log」，过滤框输入 <code>callback</code>；已登录则按 <kbd>F5</kbd> 刷新。</li>
+              <li>右键出现的 <code>callback?…code=…</code> →「复制网址」，<b>30 秒内</b>粘贴：</li>
+            </ol>
             <div class="input-group">
-              <input type="password" v-model.trim="pixiv.token" placeholder="粘贴 Pixiv refresh token" autocomplete="off">
+              <input type="text" v-model.trim="pixiv.code" placeholder="粘贴 callback 网址" autocomplete="off" spellcheck="false" @keydown.enter="pixivFinish">
+              <button class="btn" :disabled="!pixiv.code || pixiv.busy" @click="pixivFinish">完成授权</button>
+            </div>
+            <div class="input-group">
+              <input type="password" v-model.trim="pixiv.token" placeholder="或直接粘贴 refresh token" autocomplete="off">
               <button class="btn" :disabled="!pixiv.token || pixiv.busy" @click="pixivSaveToken">保存</button>
             </div>
           </details>
-          <small>令牌只保存在本机项目的 gallery-dl.conf 中，不会上传。</small>
+          <small>Cookie / 令牌只保存在本机项目的 gallery-dl.conf 中，不会上传。Cookie 等同于登录状态，请勿分享给他人。</small>
         </div>
 
         <div class="modal-section">DeepSeek 翻译<small>保存后生效</small></div>

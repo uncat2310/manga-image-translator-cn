@@ -1352,3 +1352,7 @@ details.advanced[open] > summary ~ * { animation: rise-in .3s var(--ease-out) bo
 [data-theme="comic"] .site-row { border: 2px solid var(--line); }
 [data-theme="comic"] .pixiv-flow { border-color: var(--line); }
 [data-theme="island"] .site-row { border-radius: 18px; }
+
+.flow-note { padding: 8px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+.pixiv-token ol { margin: 0 0 10px; }
+.pixiv-token .input-group + .input-group { margin-top: 8px; }
