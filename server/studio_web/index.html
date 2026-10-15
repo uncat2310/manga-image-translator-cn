@@ -122,27 +122,35 @@
     <!-- 左侧：页面 -->
     <section class="workspace">
 
-      <div class="urlbar glass" :class="{ busy: importing }">
+      <div class="urlbar glass">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
-        <input type="url" v-model.trim="importUrl" :disabled="importing || running"
-               placeholder="粘贴漫画网页链接，自动下载并翻译" @keydown.enter="importFromUrl">
+        <input type="text" v-model.trim="importUrl" spellcheck="false"
+               placeholder="粘贴漫画网页链接（可一次粘贴多个），自动排队下载并翻译" @keydown.enter="importFromUrl">
         <label class="check check-small" title="下载完成后立即开始翻译">
           <input type="checkbox" v-model="options.autoTranslate"> 自动翻译
         </label>
-        <button class="btn btn-accent" :disabled="!importUrl || importing || running" @click="importFromUrl">
-          {{ importing ? '下载中…' : (options.autoTranslate ? '下载并翻译' : '下载') }}
+        <button class="btn btn-accent" :disabled="!importUrl" @click="importFromUrl">
+          {{ importActive ? '加入队列' : (options.autoTranslate ? '下载并翻译' : '下载') }}
         </button>
       </div>
-      <div class="import-status" v-if="importJob" :class="'is-' + importJob.status">
-        <div class="import-line">
-          <span v-if="importJob.status === 'probing'"><span class="spinner spinner-sm"></span>正在读取图集信息…</span>
-          <span v-else-if="importJob.status === 'downloading'"><span class="spinner spinner-sm"></span>正在下载「{{ importJob.title }}」 {{ importJob.downloaded }} / {{ importJob.total }}</span>
-          <span v-else-if="importJob.status === 'loading'"><span class="spinner spinner-sm"></span>正在载入图片…</span>
-          <span v-else-if="importJob.status === 'error'" class="text-error">下载失败：{{ importJob.error }}</span>
-          <button class="mini mini-light" v-if="importJob.status === 'error'" @click="importJob = null">✕</button>
+      <transition-group name="job" tag="div" class="jobs" v-if="imports.length">
+        <div v-for="j in imports" :key="j.id" class="job" :class="'is-' + j.status">
+          <span class="job-icon">
+            <span class="spinner spinner-sm" v-if="['probing', 'downloading', 'loading'].includes(j.status)"></span>
+            <template v-else-if="j.status === 'done'">✓</template>
+            <template v-else-if="j.status === 'error'">!</template>
+            <template v-else>{{ imports.filter((x) => x.status === 'queued').indexOf(j) + 1 }}</template>
+          </span>
+          <div class="job-main">
+            <div class="job-title" :title="j.url">{{ j.title || j.url }}</div>
+            <div class="job-sub">{{ importText(j) }}</div>
+            <div class="progress" v-if="j.status === 'downloading'"><div :style="{ width: (j.total ? j.downloaded / j.total * 100 : 0) + '%' }"></div></div>
+          </div>
+          <button class="btn btn-small" v-if="j.status === 'error' && /Pixiv/.test(j.error)" @click="openSettings">去授权</button>
+          <button class="mini mini-light" v-if="j.status === 'error'" title="重试" @click="retryImport(j)">↻</button>
+          <button class="mini mini-light" v-if="!['probing', 'downloading', 'loading'].includes(j.status)" title="移除" @click="removeImport(j)">✕</button>
         </div>
-        <div class="progress" v-if="importJob.status === 'downloading'"><div :style="{ width: (importJob.total ? importJob.downloaded / importJob.total * 100 : 0) + '%' }"></div></div>
-      </div>
+      </transition-group>
 
       <div v-if="!pages.length" class="dropzone glass" :class="{ active: dragging }" @click="pickFiles">
         <div class="dz-island only-island" aria-hidden="true">
@@ -168,7 +176,7 @@
       <template v-else>
         <div class="toolbar">
           <div class="summary">
-            <div class="summary-title" :title="folderName">{{ folderName }}</div>
+            <div class="summary-title" :title="summaryTitle">{{ summaryTitle }}</div>
             <div class="summary-meta">
               共 {{ pages.length }} 页
               <template v-if="counts.done"> · 已完成 {{ counts.done }}</template>
@@ -177,10 +185,9 @@
             </div>
           </div>
           <div class="toolbar-actions">
-            <button class="btn btn-ghost" @click="pickFiles" :disabled="running">添加图片</button>
+            <button class="btn btn-ghost" @click="pickFiles">添加图片</button>
             <button class="btn btn-ghost" @click="clearAll" :disabled="running">清空</button>
-            <button class="btn" @click="openFolder" :disabled="!counts.done">打开文件夹</button>
-            <a class="btn" :class="{ disabled: !counts.done }" :href="zipUrl" download>下载全部</a>
+            <button class="btn" @click="openFolder()">打开保存位置</button>
           </div>
         </div>
         <div class="overall"><div class="overall-bar" :class="{ empty: !overallProgress }" :style="{ width: overallProgress + '%' }"></div></div>
@@ -202,7 +209,19 @@
         <div class="grid-scroll" ref="gridScroll">
         <div class="grid" :class="['thumb-' + options.thumb, { active: dragging }]">
           <div class="grid-empty" v-if="!visiblePages.length">没有符合条件的页面</div>
-          <article v-for="({ p, i }, n) in visiblePages" :key="p.id" class="card" :class="'is-' + p.status"
+          <template v-for="({ p, i }, n) in visiblePages" :key="p.id">
+          <div class="group-head" v-if="n === 0 || visiblePages[n - 1].p.folder !== p.folder">
+            <div class="group-name" :title="p.folder">{{ p.folder }}</div>
+            <div class="group-meta">
+              {{ groupOf(p.folder).done }} / {{ groupOf(p.folder).total }} 页
+              <span class="text-error" v-if="groupOf(p.folder).error"> · 失败 {{ groupOf(p.folder).error }}</span>
+            </div>
+            <div class="group-actions">
+              <button class="btn btn-small btn-ghost" :disabled="!groupOf(p.folder).done" @click="openFolder(p.folder)">打开文件夹</button>
+              <a class="btn btn-small btn-ghost" :class="{ disabled: !groupOf(p.folder).done }" :href="zipHref(p.folder)" download>下载</a>
+            </div>
+          </div>
+          <article class="card" :class="'is-' + p.status"
                    :data-index="i" :style="{ '--d': Math.min(n, 24) }" @click="openViewer(i)">
             <div class="thumb">
               <img :src="p.srcUrl" :alt="p.name" loading="lazy">
@@ -216,7 +235,7 @@
               </div>
             </div>
             <div class="card-body">
-              <div class="card-name" :title="p.name">第 {{ i + 1 }} 页</div>
+              <div class="card-name" :title="p.name">第 {{ p.num }} 页</div>
               <div class="card-status">
                 <span v-if="p.status === 'queued'">等待中</span>
                 <span v-else-if="p.status === 'running'">{{ p.stageText }}</span>
@@ -227,11 +246,12 @@
               <div class="progress" v-if="p.status === 'running'"><div :style="{ width: p.progress + '%' }"></div></div>
             </div>
             <div class="card-actions" @click.stop>
-              <button class="mini" v-if="p.status === 'error' || p.status === 'done'" :disabled="running"
+              <button class="mini" v-if="p.status === 'error' || p.status === 'done'"
                       title="重新翻译" @click="retry(i)">↻</button>
               <button class="mini" :disabled="p.status === 'running'" title="移除" @click="removePage(i)">✕</button>
             </div>
           </article>
+          </template>
         </div>
         </div>
       </template>
@@ -244,8 +264,9 @@
         <div class="panel-title">当前作品</div>
         <label class="field">
           <span>作品名称</span>
-          <input type="text" v-model.trim="folderName" :disabled="running" placeholder="例如：第 1 话">
+          <input type="text" v-model.trim="folderName" placeholder="例如：第 1 话">
         </label>
+        <small class="field-hint">拖入或选择的图片保存在这个名称下；链接导入会自动用图集标题。</small>
       </div>
 
       <div class="panel glass">
@@ -396,6 +417,39 @@
             <button class="btn btn-small btn-ghost" v-if="status.output_root && status.output_root !== status.output_root_default" @click="resetOutputRoot">恢复默认</button>
           </div>
           <small>每部作品会在这里新建一个以作品名称命名的子文件夹。</small>
+        </div>
+
+        <div class="modal-section">网站账号<small>用于下载需要登录的网站</small></div>
+        <div class="site-row">
+          <div class="site-name"><b>Pixiv</b>
+            <span class="pill" :class="sites.pixiv ? 'pill-ok' : 'pill-warn'">{{ sites.pixiv ? '已授权' : '未授权' }}</span>
+          </div>
+          <div class="site-actions">
+            <button class="btn btn-small" @click="pixiv.open = !pixiv.open; pixiv.step = 1">{{ sites.pixiv ? '重新授权' : '授权' }}</button>
+            <button class="btn btn-small btn-ghost" v-if="sites.pixiv" @click="pixivRemove">移除</button>
+          </div>
+        </div>
+        <div class="pixiv-flow" v-if="pixiv.open">
+          <ol>
+            <li :class="{ done: pixiv.step > 1 }">
+              <b>打开登录页</b>
+              <button class="btn btn-small btn-accent" :disabled="pixiv.busy" @click="pixivOpenLogin">打开 Pixiv 登录页</button>
+            </li>
+            <li>在新打开的页面按 <kbd>F12</kbd>，切到「<b>网络 / Network</b>」标签，然后登录 Pixiv。</li>
+            <li>登录后在网络列表最下面找到 <code>callback?state=…</code>，右键复制它的网址，<b>30 秒内</b>粘贴到下面：</li>
+          </ol>
+          <div class="input-group">
+            <input type="text" v-model.trim="pixiv.code" placeholder="粘贴 callback 网址或其中的 code" autocomplete="off" spellcheck="false" @keydown.enter="pixivFinish">
+            <button class="btn btn-accent" :disabled="!pixiv.code || pixiv.busy" @click="pixivFinish">{{ pixiv.busy ? '授权中…' : '完成授权' }}</button>
+          </div>
+          <details class="pixiv-token">
+            <summary>已经有 refresh token？</summary>
+            <div class="input-group">
+              <input type="password" v-model.trim="pixiv.token" placeholder="粘贴 Pixiv refresh token" autocomplete="off">
+              <button class="btn" :disabled="!pixiv.token || pixiv.busy" @click="pixivSaveToken">保存</button>
+            </div>
+          </details>
+          <small>令牌只保存在本机项目的 gallery-dl.conf 中，不会上传。</small>
         </div>
 
         <div class="modal-section">DeepSeek 翻译<small>保存后生效</small></div>

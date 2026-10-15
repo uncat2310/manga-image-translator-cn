@@ -1266,3 +1266,89 @@ details.advanced[open] > summary ~ * { animation: rise-in .3s var(--ease-out) bo
 @media (prefers-reduced-motion: reduce) {
   .cloud, .firefly, .twinkle, .moon { animation: none !important; }
 }
+
+/* =========================================================
+   右侧栏：给阴影留出空间，底部渐隐，不再硬切出色块
+   ========================================================= */
+.sidebar-scroll {
+  margin: 0 -24px; padding: 6px 24px 28px;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 30px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 10px, #000 calc(100% - 30px), transparent 100%);
+}
+@media (max-width: 960px) {
+  .sidebar-scroll { -webkit-mask-image: none; mask-image: none; margin: 0; padding: 0; }
+}
+.field-hint { display: block; margin-top: -6px; font-size: 12px; color: var(--muted); line-height: 1.55; }
+
+/* =========================================================
+   链接下载队列
+   ========================================================= */
+.jobs { flex: none; display: flex; flex-direction: column; gap: 8px; margin: -4px 0 14px; max-height: 210px; overflow-y: auto; }
+.job {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px;
+  background: var(--surface); border-radius: 16px; box-shadow: var(--shadow);
+}
+.job-icon {
+  flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--surface-2); color: var(--muted); font-size: 12.5px; font-weight: 800;
+}
+.job.is-done .job-icon { background: var(--ok); color: #fff; }
+.job.is-error .job-icon { background: var(--error); color: #fff; }
+.job-main { flex: 1; min-width: 0; }
+.job-title { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job-sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job.is-error .job-sub { color: var(--error); white-space: normal; }
+.job .progress { margin-top: 6px; }
+.job-enter-active, .job-leave-active { transition: opacity .3s ease, transform .3s var(--ease-out); }
+.job-enter-from { opacity: 0; transform: translateY(-6px); }
+.job-leave-to { opacity: 0; transform: translateX(16px); }
+[data-theme="comic"] .job { border: 2px solid var(--line); box-shadow: var(--pop-sm); border-radius: 14px; }
+[data-theme="comic"] .job-icon { border: 2px solid var(--line); }
+[data-theme="island"] .job { border-radius: 20px; }
+
+/* =========================================================
+   缩略图按作品分组
+   ========================================================= */
+.group-head {
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-top: 10px; padding: 8px 6px 2px; animation: rise-in .4s var(--ease-out) both;
+}
+.grid > .group-head:first-of-type { margin-top: 0; }
+.group-name { font-size: 15px; font-weight: 800; min-width: 0; max-width: 60%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.group-meta { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.group-actions { margin-left: auto; display: flex; gap: 4px; }
+[data-theme="island"] .group-name { color: #1d5541; }
+[data-theme="island"] .group-meta { color: #2c6a53; }
+[data-theme="island"] .group-actions .btn-ghost { color: #1d5541; }
+:root[data-scheme="dark"][data-theme="island"] .group-name { color: #fff4dc; }
+:root[data-scheme="dark"][data-theme="island"] .group-meta { color: #c4d4c9; }
+:root[data-scheme="dark"][data-theme="island"] .group-actions .btn-ghost { color: #fff4dc; }
+[data-theme="comic"] .group-head { border-bottom: 2.5px dashed var(--line); padding-bottom: 8px; }
+
+/* =========================================================
+   设置：网站账号 / Pixiv 授权引导
+   ========================================================= */
+.site-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 12px; border-radius: 14px; background: var(--surface-2); margin-bottom: 12px;
+}
+.site-name { display: flex; align-items: center; gap: 8px; }
+.site-actions { display: flex; gap: 6px; }
+.pixiv-flow {
+  padding: 14px; margin: -4px 0 14px; border-radius: 16px; border: 2px dashed var(--line-strong);
+  display: flex; flex-direction: column; gap: 10px; font-size: 13px; animation: rise-in .3s var(--ease-out) both;
+}
+.pixiv-flow ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.6; }
+.pixiv-flow li b { font-weight: 700; }
+.pixiv-flow li:first-child { display: list-item; }
+.pixiv-flow li:first-child .btn { margin-left: 8px; vertical-align: middle; }
+.pixiv-flow li.done { color: var(--muted); }
+.pixiv-flow kbd, .pixiv-flow code {
+  padding: 1px 6px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--line-strong);
+  font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+}
+.pixiv-flow small { color: var(--muted); font-size: 12px; }
+.pixiv-token summary { cursor: pointer; color: var(--muted); font-size: 12.5px; margin-bottom: 8px; }
+[data-theme="comic"] .site-row { border: 2px solid var(--line); }
+[data-theme="comic"] .pixiv-flow { border-color: var(--line); }
+[data-theme="island"] .site-row { border-radius: 18px; }

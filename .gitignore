@@ -68,3 +68,6 @@ Thumbs.db
 
 # 工作台本地设置（保存位置等）
 studio-settings.json
+
+# gallery-dl 本地配置（Pixiv 等网站的登录令牌）
+gallery-dl.conf

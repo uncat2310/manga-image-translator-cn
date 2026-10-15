@@ -146,9 +146,10 @@ createApp({
       try { localStorage.setItem('mit-studio-theme', t); } catch {}
     });
     const importUrl = ref('');
-    const importJob = ref(null);
-    const importing = computed(() => !!importJob.value && importJob.value.status !== 'error');
-    let abort = null, nextId = 1, statusTimer = null, startedAt = 0, finishedInRun = 0;
+    const imports = reactive([]);
+    const sites = reactive({ pixiv: false });
+    const pixiv = reactive({ open: false, step: 1, code: '', token: '', busy: false });
+    let abort = null, nextId = 1, statusTimer = null, startedAt = 0, finishedInRun = 0, importBusy = false;
 
     watch(options, (v) => { try { localStorage.setItem(STORE_KEY, JSON.stringify(v)); } catch {} }, { deep: true });
 
@@ -173,21 +174,25 @@ createApp({
     }
 
     /* ---------- 文件 ---------- */
-    function addFiles(files, fromFolder) {
+    function addFiles(files, fromFolder, folder) {
       const imgs = [...files].filter((f) => IMAGE_RE.test(f.name))
         .sort((a, b) => (a.webkitRelativePath || a.name).localeCompare(b.webkitRelativePath || b.name, 'zh', { numeric: true }));
-      if (!imgs.length) { toast('没有找到图片文件（支持 PNG / JPG / WEBP / BMP）', 'error'); return; }
-      if (!pages.length && fromFolder) folderName.value = fromFolder;
+      if (!imgs.length) { toast('没有找到图片文件（支持 PNG / JPG / WEBP / BMP）', 'error'); return 0; }
+      if (!folder) {
+        if (!pages.length && fromFolder) folderName.value = fromFolder;
+        folder = fromFolder || folderName.value || todayName();
+      }
+      let num = pages.filter((x) => x.folder === folder).length;
       for (const f of imgs) {
-        pages.push({ id: nextId++, file: f, name: f.name, srcUrl: URL.createObjectURL(f), resultUrl: '',
+        pages.push({ id: nextId++, file: f, name: f.name, folder, num: ++num, srcUrl: URL.createObjectURL(f), resultUrl: '',
           status: 'queued', stageText: '', progress: 0, error: '', ms: 0 });
       }
-      toast(`已添加 ${imgs.length} 页`);
+      toast(`已添加 ${imgs.length} 页到「${folder}」`);
+      return imgs.length;
     }
 
     async function onDrop(e) {
       dragging.value = false;
-      if (running.value) { toast('正在翻译，请稍后再添加', 'error'); return; }
       const items = [...(e.dataTransfer.items || [])].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
       if (items.length) {
         const out = [];
@@ -216,48 +221,82 @@ createApp({
     function clearAll() {
       if (!confirm('清空当前列表？已保存到文件夹的结果不会被删除。')) return;
       pages.splice(0).forEach(releasePage);
+      for (let k = imports.length - 1; k >= 0; k--) if (['done', 'error', 'queued'].includes(imports[k].status)) imports.splice(k, 1);
       folderName.value = todayName();
     }
 
-    /* ---------- 从网页链接导入 ---------- */
-    async function importFromUrl() {
-      const url = importUrl.value;
-      if (!url || importing.value || running.value) return;
-      if (!/^https?:\/\//i.test(url)) { toast('请输入以 http:// 或 https:// 开头的网址', 'error'); return; }
-      importJob.value = { status: 'probing', title: '', total: 0, downloaded: 0, error: '' };
-      try {
-        const r = await fetch('/studio/api/import', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }),
-        });
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(data.detail || '无法开始下载');
-        let job;
-        for (;;) {
-          await new Promise((res) => setTimeout(res, 1000));
-          const s = await fetch('/studio/api/import/' + data.id);
-          if (!s.ok) throw new Error('下载任务丢失，请重试');
-          job = await s.json();
-          importJob.value = job;
-          if (job.status === 'done') break;
-          if (job.status === 'error') return;
-        }
-        importJob.value = { ...job, status: 'loading' };
-        const files = [];
-        for (const name of job.files) {
-          const b = await fetch(`/studio/api/import/${data.id}/file/${encodeURIComponent(name)}`).then((x) => x.blob());
-          files.push(new File([b], name, { type: b.type }));
-        }
-        if (!pages.length) folderName.value = job.title;
-        addFiles(files);
-        importJob.value = null;
-        importUrl.value = '';
-        if (options.autoTranslate) {
-          if (!status.engine_ready) toast('翻译引擎还在启动，就绪后点「开始翻译」即可', 'info', 5000);
-          else start();
-        }
-      } catch (err) {
-        importJob.value = { status: 'error', error: String(err.message || err) };
+    /* ---------- 从网页链接导入：排队依次下载 ---------- */
+    const ACTIVE_IMPORT = ['probing', 'downloading', 'loading'];
+    function importFromUrl() {
+      const urls = importUrl.value.split(/\s+/).filter(Boolean);
+      if (!urls.length) return;
+      const bad = urls.filter((u) => !/^https?:\/\//i.test(u));
+      if (bad.length) { toast('请输入以 http:// 或 https:// 开头的网址', 'error'); return; }
+      let added = 0;
+      for (const url of urls) {
+        if (imports.some((j) => j.url === url && j.status !== 'error' && j.status !== 'done')) continue;
+        imports.push({ id: nextId++, url, status: 'queued', title: '', total: 0, downloaded: 0, error: '' });
+        added++;
       }
+      importUrl.value = '';
+      if (added > 1 || imports.length > 1) toast(`已加入下载队列（${imports.filter((j) => j.status === 'queued').length} 个等待中）`);
+      pumpImports();
+    }
+
+    async function runImport(job) {
+      job.status = 'probing'; job.error = '';
+      const r = await fetch('/studio/api/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: job.url }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || '无法开始下载');
+      let info;
+      for (;;) {
+        await new Promise((res) => setTimeout(res, 1000));
+        const st = await fetch('/studio/api/import/' + data.id);
+        if (!st.ok) throw new Error('下载任务丢失，请重试');
+        info = await st.json();
+        Object.assign(job, { status: info.status === 'done' ? 'loading' : info.status, title: info.title || job.title,
+          total: info.total, downloaded: info.downloaded });
+        if (info.status === 'done') break;
+        if (info.status === 'error') throw new Error(info.error || '下载失败');
+      }
+      const files = [];
+      for (const name of info.files) {
+        const b = await fetch(`/studio/api/import/${data.id}/file/${encodeURIComponent(name)}`).then((x) => x.blob());
+        files.push(new File([b], name, { type: b.type }));
+      }
+      addFiles(files, '', info.title || todayName());
+      job.status = 'done';
+      setTimeout(() => { const k = imports.indexOf(job); if (k >= 0 && job.status === 'done') imports.splice(k, 1); }, 4000);
+      if (options.autoTranslate) {
+        if (!status.engine_ready) toast('翻译引擎还在启动，就绪后点「开始翻译」即可', 'info', 5000);
+        else start(false);
+      }
+    }
+
+    async function pumpImports() {
+      if (importBusy) return;
+      importBusy = true;
+      try {
+        for (;;) {
+          const job = imports.find((j) => j.status === 'queued');
+          if (!job) break;
+          try { await runImport(job); } catch (err) { job.status = 'error'; job.error = String(err.message || err); }
+        }
+      } finally {
+        importBusy = false;
+      }
+    }
+    function retryImport(job) { job.status = 'queued'; job.error = ''; pumpImports(); }
+    function removeImport(job) { const k = imports.indexOf(job); if (k >= 0) imports.splice(k, 1); }
+    function importText(j) {
+      if (j.status === 'queued') return '排队中';
+      if (j.status === 'probing') return '正在读取图集信息…';
+      if (j.status === 'downloading') return `正在下载 ${j.downloaded} / ${j.total}`;
+      if (j.status === 'loading') return '正在载入图片…';
+      if (j.status === 'done') return `已加入翻译队列（${j.total} 页）`;
+      return '下载失败：' + j.error;
     }
 
     /* ---------- 翻译 ---------- */
@@ -274,7 +313,7 @@ createApp({
 
     async function saveResult(p, blob) {
       const form = new FormData();
-      form.append('folder', folderName.value || todayName());
+      form.append('folder', p.folder || folderName.value || todayName());
       form.append('name', p.name);
       form.append('image', blob, p.name);
       const r = await fetch('/studio/api/save', { method: 'POST', body: form });
@@ -312,22 +351,39 @@ createApp({
       }
     }
 
-    async function start() {
+    function folderFinished(folder) {
+      return !pages.some((x) => x.folder === folder && (x.status === 'queued' || x.status === 'running'));
+    }
+
+    // Keeps taking the next queued page, so pages added during a run (drops, links, retries) are picked up too.
+    async function start(retryErrors = true) {
+      if (running.value) return;
       if (options.translator === 'deepseek' && !status.deepseek_key_set) { openSettings(); return; }
+      if (retryErrors) pages.forEach((p) => { if (p.status === 'error') { p.status = 'queued'; p.error = ''; p.progress = 0; } });
       running.value = true; stopping.value = false;
       startedAt = performance.now(); finishedInRun = 0;
+      const doneFolders = [];
       try {
-        for (const p of pages) {
-          if (stopping.value) break;
-          if (p.status === 'queued' || p.status === 'error') await translatePage(p);
+        while (!stopping.value) {
+          const p = pages.find((x) => x.status === 'queued');
+          if (!p) break;
+          await translatePage(p);
+          if (p.status !== 'queued' && folderFinished(p.folder) && !doneFolders.includes(p.folder)) {
+            doneFolders.push(p.folder);
+            const failed = pages.filter((x) => x.folder === p.folder && x.status === 'error').length;
+            if (failed) toast(`「${p.folder}」完成，但有 ${failed} 页失败`, 'error', 5000);
+            else toast(`「${p.folder}」翻译完成`, 'ok', 4000);
+          }
         }
       } finally {
         running.value = false;
         const failed = counts.value.error;
+        const moreComing = imports.some((j) => j.status === 'queued' || ACTIVE_IMPORT.includes(j.status));
         if (stopping.value) toast('已停止');
-        else if (failed) toast(`完成，但有 ${failed} 页失败，可点卡片右上角 ↻ 重试`, 'error', 6000);
+        else if (failed) toast(`有 ${failed} 页失败，可点卡片右上角 ↻ 重试`, 'error', 6000);
+        else if (finishedInRun && moreComing) toast('当前作品已完成，等待下一个作品下载…');
         else if (finishedInRun) {
-          toast(`全部完成！已保存到「${folderName.value}」`, 'ok', 5000);
+          toast(doneFolders.length > 1 ? `全部 ${doneFolders.length} 部作品翻译完成！` : `全部完成！已保存到「${doneFolders[0] || folderName.value}」`, 'ok', 5000);
           stamp.value = true;
           setTimeout(() => { stamp.value = false; }, theme.value === 'island' ? 2600 : 1600);
         }
@@ -343,16 +399,17 @@ createApp({
     function retry(i) {
       const p = pages[i];
       p.status = 'queued'; p.progress = 0; p.error = '';
-      start();
+      start(false);
     }
 
     /* ---------- 文件夹 ---------- */
-    async function openFolder() {
+    async function openFolder(folder) {
       const r = await fetch('/studio/api/open-folder', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ folder: folderName.value }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(folder ? { folder } : {}),
       });
       if (!r.ok) toast('打开文件夹失败', 'error');
     }
+    const zipHref = (folder) => '/studio/api/zip?folder=' + encodeURIComponent(folder);
 
     /* ---------- 查看 ---------- */
     const current = computed(() => pages[viewer.index] || {});
@@ -396,6 +453,7 @@ createApp({
     /* ---------- 设置 ---------- */
     function openSettings() {
       settings.key = ''; settings.showKey = false; settings.model = status.deepseek_model; settings.open = true;
+      refreshSites();
     }
     async function saveSettings() {
       settings.saving = true;
@@ -416,6 +474,50 @@ createApp({
       } finally {
         settings.saving = false;
       }
+    }
+
+    /* ---------- 网站账号：Pixiv ---------- */
+    async function refreshSites() {
+      try { Object.assign(sites, await (await fetch('/studio/api/sites')).json()); } catch {}
+    }
+    async function postJson(url, body) {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.detail || '操作失败');
+      return data;
+    }
+    async function pixivOpenLogin() {
+      pixiv.busy = true;
+      try {
+        const data = await postJson('/studio/api/pixiv/start');
+        window.open(data.url, '_blank', 'noopener');
+        pixiv.step = 2;
+      } catch (err) { toast(String(err.message || err), 'error'); } finally { pixiv.busy = false; }
+    }
+    async function pixivFinish() {
+      if (!pixiv.code.trim()) return;
+      pixiv.busy = true;
+      try {
+        await postJson('/studio/api/pixiv/finish', { code: pixiv.code });
+        Object.assign(pixiv, { open: false, step: 1, code: '' });
+        await refreshSites();
+        toast('Pixiv 授权成功', 'ok');
+        imports.forEach((j) => { if (j.status === 'error' && /Pixiv/.test(j.error)) retryImport(j); });
+      } catch (err) { toast(String(err.message || err), 'error', 6000); } finally { pixiv.busy = false; }
+    }
+    async function pixivSaveToken() {
+      if (!pixiv.token.trim()) return;
+      pixiv.busy = true;
+      try {
+        await postJson('/studio/api/pixiv/token', { token: pixiv.token });
+        Object.assign(pixiv, { open: false, token: '' });
+        await refreshSites();
+        toast('Pixiv 授权成功', 'ok');
+      } catch (err) { toast(String(err.message || err), 'error'); } finally { pixiv.busy = false; }
+    }
+    async function pixivRemove() {
+      try { await postJson('/studio/api/pixiv/token', { token: null }); await refreshSites(); toast('已移除 Pixiv 授权'); }
+      catch (err) { toast(String(err.message || err), 'error'); }
     }
 
     /* ---------- 保存位置 ---------- */
@@ -472,6 +574,20 @@ createApp({
     });
     const pending = computed(() => counts.value.queued + counts.value.error);
     const pendingCount = computed(() => counts.value.queued + counts.value.running + counts.value.error);
+    const groups = computed(() => {
+      const map = new Map();
+      for (const p of pages) {
+        if (!map.has(p.folder)) map.set(p.folder, { folder: p.folder, total: 0, done: 0, error: 0, active: 0 });
+        const g = map.get(p.folder);
+        g.total++;
+        if (p.status === 'done' || p.status === 'skipped') g.done++;
+        else if (p.status === 'error') g.error++;
+        else g.active++;
+      }
+      return [...map.values()];
+    });
+    const groupOf = (folder) => groups.value.find((g) => g.folder === folder) || { total: 0, done: 0, error: 0, active: 0 };
+    const summaryTitle = computed(() => (groups.value.length > 1 ? `翻译队列 · ${groups.value.length} 部作品` : (groups.value[0] || {}).folder || folderName.value));
     const visiblePages = computed(() => pages.map((p, i) => ({ p, i })).filter(({ p }) =>
       filter.value === 'all' ? true
         : filter.value === 'error' ? p.status === 'error'
@@ -489,6 +605,7 @@ createApp({
       });
     }
     const canStart = computed(() => pending.value > 0 && status.engine_ready);
+    const importActive = computed(() => imports.some((j) => j.status === 'queued' || ACTIVE_IMPORT.includes(j.status)));
     const startLabel = computed(() => {
       if (!pages.length) return '开始翻译';
       if (!pending.value) return '全部完成';
@@ -525,7 +642,7 @@ createApp({
 
     return {
       pages, options, folderName, status, running, stopping, dragging, toasts, viewer, settings,
-      fileInput, folderInput, stage, gridScroll, filter, stamp, theme, clock, mode, modeLabel, cycleMode, pendingCount, visiblePages, scrollToRunning, importUrl, importJob, importing, importFromUrl, current, counts, overallProgress, etaText, canStart, startLabel, startHint,
+      fileInput, folderInput, stage, gridScroll, filter, stamp, theme, clock, mode, modeLabel, cycleMode, pendingCount, visiblePages, scrollToRunning, importUrl, imports, importActive, importFromUrl, importText, retryImport, removeImport, groups, groupOf, summaryTitle, zipHref, sites, pixiv, pixivOpenLogin, pixivFinish, pixivSaveToken, pixivRemove, current, counts, overallProgress, etaText, canStart, startLabel, startHint,
       engineChip, qualityHint, outputPath, zipUrl,
       languages: LANGUAGES,
       thumbSizes: [{ value: 's', label: '小' }, { value: 'm', label: '中' }, { value: 'l', label: '大' }],

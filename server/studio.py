@@ -306,6 +306,7 @@ async def download_zip(folder: str):
 # ---------- 从网页链接导入（gallery-dl） ----------
 
 DOWNLOAD_ROOT = ROOT / 'downloads'
+GDL_CONFIG = ROOT / 'gallery-dl.conf'  # site credentials (Pixiv token); git-ignored
 _jobs: dict = {}
 
 
@@ -313,10 +314,30 @@ class ImportBody(BaseModel):
     url: str
 
 
+def _gdl_cmd(*args) -> list:
+    cmd = [sys.executable, '-m', 'gallery_dl']
+    if GDL_CONFIG.exists():
+        cmd += ['--config', str(GDL_CONFIG)]
+    return cmd + list(args)
+
+
 def _gallery_dl(*args, timeout=None) -> subprocess.CompletedProcess:
     flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-    return subprocess.run([sys.executable, '-m', 'gallery_dl', *args], capture_output=True, text=True,
+    return subprocess.run(_gdl_cmd(*args), capture_output=True, text=True,
                           encoding='utf-8', errors='replace', timeout=timeout, creationflags=flags)
+
+
+def _friendly_gdl_error(message: str) -> str:
+    low = message.lower()
+    if 'refresh-token' in low and 'pixiv' in (low + ' pixiv'):
+        return 'Pixiv 需要先授权：请到右上角「设置 → 网站账号」里授权 Pixiv 后再试'
+    if 'unsupported url' in low or 'no suitable extractor' in low:
+        return '暂不支持这个网站的链接'
+    if '404' in low or 'not found' in low:
+        return '找不到这个作品，可能已被删除或需要登录才能查看'
+    if '403' in low or 'forbidden' in low:
+        return '网站拒绝了访问，可能需要登录授权'
+    return message[:300]
 
 
 def _last_error(proc: subprocess.CompletedProcess) -> str:
@@ -335,16 +356,22 @@ def _run_import(job: dict):
         except json.JSONDecodeError:
             messages = []
         files = [m for m in messages if isinstance(m, list) and m and m[0] == 3]
+        errors = [m[1] for m in messages if isinstance(m, list) and m and m[0] == -1 and isinstance(m[1], dict)]
         if not files:
-            raise RuntimeError(_last_error(probe) if probe.returncode else '这个链接里没有找到图片')
+            if errors:
+                raise RuntimeError(_friendly_gdl_error(str(errors[0].get('message') or errors[0].get('error'))))
+            if probe.returncode:
+                raise RuntimeError(_friendly_gdl_error(_last_error(probe)))
+            raise RuntimeError('这个链接里没有找到图片')
         meta = next((m[1] for m in messages if m and m[0] == 2 and isinstance(m[1], dict)), files[0][2])
-        title = meta.get('title') or meta.get('title_en') or meta.get('gallery_id') or 'web-import'
+        title = (meta.get('title') or meta.get('title_en') or meta.get('gallery_id')
+                 or Path(urlparse(url).path.rstrip('/')).stem or urlparse(url).netloc or 'web-import')
         job.update(title=_safe_name(str(title), 'web-import'), total=len(files), status='downloading')
 
         target = DOWNLOAD_ROOT / job['title']
         target.mkdir(parents=True, exist_ok=True)
         job['dir'] = target
-        proc = subprocess.Popen([sys.executable, '-m', 'gallery_dl', '-D', str(target), url],
+        proc = subprocess.Popen(_gdl_cmd('-D', str(target), url),
                                 stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
                                 encoding='utf-8', errors='replace',
                                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0)
@@ -399,6 +426,118 @@ class _QuietPolling:
     def filter(self, record) -> bool:
         msg = record.getMessage()
         return '/studio/api/status' not in msg and '/studio/api/import/' not in msg
+
+
+# ---------- 网站账号：Pixiv 授权（与 gallery-dl oauth:pixiv 相同的流程） ----------
+
+_pixiv_pending: dict = {}
+
+
+def _read_gdl_config() -> dict:
+    import json
+    try:
+        return json.loads(GDL_CONFIG.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_gdl_config(data: dict):
+    import json
+    GDL_CONFIG.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding='utf-8')
+
+
+def _pixiv_token() -> Optional[str]:
+    return _read_gdl_config().get('extractor', {}).get('pixiv', {}).get('refresh-token')
+
+
+def _set_pixiv_token(token: Optional[str]):
+    data = _read_gdl_config()
+    pixiv = data.setdefault('extractor', {}).setdefault('pixiv', {})
+    if token:
+        pixiv['refresh-token'] = token
+    else:
+        pixiv.pop('refresh-token', None)
+    _write_gdl_config(data)
+
+
+@router.get('/api/sites')
+async def sites_status():
+    return {'pixiv': bool(_pixiv_token())}
+
+
+@router.post('/api/pixiv/start')
+async def pixiv_start(request: Request):
+    _check_origin(request)
+    import base64
+    import hashlib
+    import secrets
+    from urllib.parse import urlencode
+    verifier = secrets.token_hex(32)
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
+    _pixiv_pending['verifier'] = verifier
+    query = urlencode({'client': 'pixiv-android', 'code_challenge_method': 'S256', 'code_challenge': challenge})
+    return {'url': f'https://app-api.pixiv.net/web/v1/login?{query}'}
+
+
+class PixivCodeBody(BaseModel):
+    code: str
+
+
+@router.post('/api/pixiv/finish')
+async def pixiv_finish(body: PixivCodeBody, request: Request):
+    _check_origin(request)
+    verifier = _pixiv_pending.get('verifier')
+    if not verifier:
+        raise HTTPException(400, detail='请先点「打开 Pixiv 登录页」')
+    # Accept the bare code, the whole callback URL, or several query parameters
+    code = body.code.strip()
+    if 'code=' in code:
+        code = code.split('code=', 1)[1].split('&', 1)[0]
+    code = code.rpartition('=')[2].strip()
+    if not code:
+        raise HTTPException(400, detail='没有找到 code，请复制回调地址里的 code')
+    import asyncio
+    import requests
+    from gallery_dl.extractor.pixiv import PixivAppAPI
+
+    def exchange():
+        return requests.post('https://oauth.secure.pixiv.net/auth/token', timeout=30, headers={
+            'User-Agent': 'PixivAndroidApp/5.0.234 (Android 11; Pixel 5)',
+        }, data={
+            'client_id': PixivAppAPI.CLIENT_ID,
+            'client_secret': PixivAppAPI.CLIENT_SECRET,
+            'code': code,
+            'code_verifier': verifier,
+            'grant_type': 'authorization_code',
+            'include_policy': 'true',
+            'redirect_uri': 'https://app-api.pixiv.net/web/v1/users/auth/pixiv/callback',
+        }).json()
+
+    try:
+        data = await asyncio.to_thread(exchange)
+    except Exception as e:  # noqa: BLE001 - network problems go back to the page
+        raise HTTPException(502, detail=f'连接 Pixiv 失败：{e}')
+    if 'refresh_token' not in data:
+        if str(data.get('error')) in ('invalid_request', 'invalid_grant'):
+            raise HTTPException(400, detail='code 已过期（登录后 30 秒内有效），请重新打开登录页再试一次')
+        raise HTTPException(400, detail=f'授权失败：{data.get("error") or data}')
+    _pixiv_pending.clear()
+    _set_pixiv_token(data['refresh_token'])
+    return {'pixiv': True}
+
+
+class PixivTokenBody(BaseModel):
+    token: Optional[str] = None
+
+
+@router.post('/api/pixiv/token')
+async def pixiv_token(body: PixivTokenBody, request: Request):
+    _check_origin(request)
+    token = (body.token or '').strip()
+    if token and not re.fullmatch(r'[A-Za-z0-9_\-]{20,200}', token):
+        raise HTTPException(400, detail='refresh token 格式不正确')
+    _set_pixiv_token(token or None)
+    return {'pixiv': bool(token)}
 
 
 def mount(app):
