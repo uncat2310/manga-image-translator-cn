@@ -1356,3 +1356,7 @@ details.advanced[open] > summary ~ * { animation: rise-in .3s var(--ease-out) bo
 .flow-note { padding: 8px 12px; border-radius: 12px; background: var(--accent-soft); color: var(--ink); font-size: 12.5px; line-height: 1.6; }
 .pixiv-token ol { margin: 0 0 10px; }
 .pixiv-token .input-group + .input-group { margin-top: 8px; }
+
+.eh-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.eh-fields input:last-child { grid-column: 1 / -1; }
+.eh-save { display: flex; justify-content: flex-end; }

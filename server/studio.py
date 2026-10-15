@@ -331,6 +331,10 @@ def _friendly_gdl_error(message: str) -> str:
     low = message.lower()
     if 'refresh-token' in low and 'pixiv' in (low + ' pixiv'):
         return 'Pixiv 需要登录：请到右上角「设置 → 网站账号」填写 Pixiv Cookie 后再试'
+    if 'exhentai' in low or 'sad panda' in low or 'ipb_' in low or ('login' in low and 'e-hentai' in low):
+        return 'E 站里站（exhentai）需要登录：请到右上角「设置 → 网站账号」填写 E 站 Cookie 后再试'
+    if '509' in low or 'image limit' in low:
+        return 'E 站图片配额用完了：请稍后再试，或在设置里填写 E 站 Cookie 后重试'
     if 'unsupported url' in low or 'no suitable extractor' in low:
         return '暂不支持这个网站的链接'
     if '404' in low or 'not found' in low:
@@ -356,7 +360,9 @@ def _run_import(job: dict):
     if pixiv_work and not _pixiv_token():
         return _run_pixiv_web_import(job, pixiv_work.group(1))
     try:
-        probe = _gallery_dl('-j', url, timeout=120)
+        # Resolving every page up front is slow on some sites (E-Hentai opens each image page),
+        # so only resolve the first file; the gallery metadata carries the page count.
+        probe = _gallery_dl('-j', '--range', '1', url, timeout=120)
         try:
             messages = json.loads(probe.stdout or '[]')
         except json.JSONDecodeError:
@@ -372,7 +378,15 @@ def _run_import(job: dict):
         meta = next((m[1] for m in messages if m and m[0] == 2 and isinstance(m[1], dict)), files[0][2])
         title = (meta.get('title') or meta.get('title_en') or meta.get('gallery_id')
                  or Path(urlparse(url).path.rstrip('/')).stem or urlparse(url).netloc or 'web-import')
-        job.update(title=_safe_name(str(title), 'web-import'), total=len(files), status='downloading')
+        total = 0
+        for key in ('filecount', 'count', 'page_count', 'num_pages'):
+            try:
+                total = int(meta.get(key) or 0)
+            except (TypeError, ValueError):
+                total = 0
+            if total:
+                break
+        job.update(title=_safe_name(str(title), 'web-import'), total=total, status='downloading')
 
         target = DOWNLOAD_ROOT / job['title']
         target.mkdir(parents=True, exist_ok=True)
@@ -386,7 +400,7 @@ def _run_import(job: dict):
                        key=lambda n: [int(t) if t.isdigit() else t for t in re.split(r'(\d+)', n)])
         if not names:
             raise RuntimeError(_last_error(subprocess.CompletedProcess([], proc.returncode, '', err)))
-        job.update(files=names, status='done')
+        job.update(files=names, total=len(names), status='done')
     except subprocess.TimeoutExpired:
         job.update(status='error', error='下载超时')
     except Exception as e:  # noqa: BLE001 - reported to the page
@@ -532,10 +546,49 @@ def _set_pixiv_cookie(value: Optional[str]):
     _write_gdl_config(data)
 
 
+def _eh_cookies() -> dict:
+    cookies = _read_gdl_config().get('extractor', {}).get('exhentai', {}).get('cookies') or {}
+    return cookies if isinstance(cookies, dict) else {}
+
+
 @router.get('/api/sites')
 async def sites_status():
     token, cookie = bool(_pixiv_token()), bool(_pixiv_cookie())
-    return {'pixiv': token or cookie, 'pixiv_mode': 'token' if token else 'cookie' if cookie else None}
+    eh = _eh_cookies()
+    return {'pixiv': token or cookie, 'pixiv_mode': 'token' if token else 'cookie' if cookie else None,
+            'exhentai': bool(eh.get('ipb_member_id') and eh.get('ipb_pass_hash'))}
+
+
+class EhCookieBody(BaseModel):
+    member_id: Optional[str] = None
+    pass_hash: Optional[str] = None
+    igneous: Optional[str] = None
+
+
+@router.post('/api/eh/cookie')
+async def eh_cookie(body: EhCookieBody, request: Request):
+    _check_origin(request)
+    member_id = (body.member_id or '').strip()
+    pass_hash = (body.pass_hash or '').strip()
+    igneous = (body.igneous or '').strip()
+    data = _read_gdl_config()
+    eh = data.setdefault('extractor', {}).setdefault('exhentai', {})
+    if not member_id and not pass_hash:
+        eh.pop('cookies', None)
+        _write_gdl_config(data)
+        return {'exhentai': False}
+    if not re.fullmatch(r'\d{1,12}', member_id):
+        raise HTTPException(400, detail='ipb_member_id 应该是一串数字')
+    if not re.fullmatch(r'[0-9a-fA-F]{32}', pass_hash):
+        raise HTTPException(400, detail='ipb_pass_hash 应该是 32 位的字母数字')
+    if igneous and not re.fullmatch(r'[0-9a-zA-Z]{1,64}', igneous):
+        raise HTTPException(400, detail='igneous 格式不正确')
+    cookies = {'ipb_member_id': member_id, 'ipb_pass_hash': pass_hash}
+    if igneous:
+        cookies['igneous'] = igneous
+    eh['cookies'] = cookies
+    _write_gdl_config(data)
+    return {'exhentai': True}
 
 
 class PixivCookieBody(BaseModel):

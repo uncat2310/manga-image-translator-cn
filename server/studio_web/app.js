@@ -147,7 +147,8 @@ createApp({
     });
     const importUrl = ref('');
     const imports = reactive([]);
-    const sites = reactive({ pixiv: false, pixiv_mode: null });
+    const sites = reactive({ pixiv: false, pixiv_mode: null, exhentai: false });
+    const eh = reactive({ open: false, member_id: '', pass_hash: '', igneous: '', busy: false });
     const pixiv = reactive({ open: false, step: 1, code: '', token: '', cookie: '', busy: false });
     let abort = null, nextId = 1, statusTimer = null, startedAt = 0, finishedInRun = 0, importBusy = false;
 
@@ -293,7 +294,7 @@ createApp({
     function importText(j) {
       if (j.status === 'queued') return '排队中';
       if (j.status === 'probing') return '正在读取图集信息…';
-      if (j.status === 'downloading') return `正在下载 ${j.downloaded} / ${j.total}`;
+      if (j.status === 'downloading') return j.total ? `正在下载 ${j.downloaded} / ${j.total}` : `正在下载，已下载 ${j.downloaded} 张`;
       if (j.status === 'loading') return '正在载入图片…';
       if (j.status === 'done') return `已加入翻译队列（${j.total} 页）`;
       return '下载失败：' + j.error;
@@ -526,6 +527,20 @@ createApp({
         imports.forEach((j) => { if (j.status === 'error' && /Pixiv/.test(j.error)) retryImport(j); });
       } catch (err) { toast(String(err.message || err), 'error'); } finally { pixiv.busy = false; }
     }
+    async function ehSave() {
+      eh.busy = true;
+      try {
+        await postJson('/studio/api/eh/cookie', { member_id: eh.member_id, pass_hash: eh.pass_hash, igneous: eh.igneous });
+        Object.assign(eh, { open: false, member_id: '', pass_hash: '', igneous: '' });
+        await refreshSites();
+        toast('E 站 Cookie 已保存', 'ok');
+        imports.forEach((j) => { if (j.status === 'error' && /E 站/.test(j.error)) retryImport(j); });
+      } catch (err) { toast(String(err.message || err), 'error'); } finally { eh.busy = false; }
+    }
+    async function ehRemove() {
+      try { await postJson('/studio/api/eh/cookie', {}); await refreshSites(); toast('已移除 E 站 Cookie'); }
+      catch (err) { toast(String(err.message || err), 'error'); }
+    }
     async function pixivRemove() {
       try { await postJson('/studio/api/pixiv/token', { token: null }); await refreshSites(); toast('已移除 Pixiv 授权'); }
       catch (err) { toast(String(err.message || err), 'error'); }
@@ -653,7 +668,7 @@ createApp({
 
     return {
       pages, options, folderName, status, running, stopping, dragging, toasts, viewer, settings,
-      fileInput, folderInput, stage, gridScroll, filter, stamp, theme, clock, mode, modeLabel, cycleMode, pendingCount, visiblePages, scrollToRunning, importUrl, imports, importActive, importFromUrl, importText, retryImport, removeImport, groups, groupOf, summaryTitle, zipHref, sites, pixiv, pixivOpenLogin, pixivFinish, pixivSaveToken, pixivSaveCookie, pixivRemove, current, counts, overallProgress, etaText, canStart, startLabel, startHint,
+      fileInput, folderInput, stage, gridScroll, filter, stamp, theme, clock, mode, modeLabel, cycleMode, pendingCount, visiblePages, scrollToRunning, importUrl, imports, importActive, importFromUrl, importText, retryImport, removeImport, groups, groupOf, summaryTitle, zipHref, sites, pixiv, pixivOpenLogin, pixivFinish, pixivSaveToken, pixivSaveCookie, pixivRemove, eh, ehSave, ehRemove, current, counts, overallProgress, etaText, canStart, startLabel, startHint,
       engineChip, qualityHint, outputPath, zipUrl,
       languages: LANGUAGES,
       thumbSizes: [{ value: 's', label: '小' }, { value: 'm', label: '中' }, { value: 'l', label: '大' }],

@@ -146,7 +146,7 @@
             <div class="job-sub">{{ importText(j) }}</div>
             <div class="progress" v-if="j.status === 'downloading'"><div :style="{ width: (j.total ? j.downloaded / j.total * 100 : 0) + '%' }"></div></div>
           </div>
-          <button class="btn btn-small" v-if="j.status === 'error' && /Pixiv/.test(j.error)" @click="openSettings">去授权</button>
+          <button class="btn btn-small" v-if="j.status === 'error' && /Pixiv|E 站/.test(j.error)" @click="openSettings">去登录</button>
           <button class="mini mini-light" v-if="j.status === 'error'" title="重试" @click="retryImport(j)">↻</button>
           <button class="mini mini-light" v-if="!['probing', 'downloading', 'loading'].includes(j.status)" title="移除" @click="removeImport(j)">✕</button>
         </div>
@@ -460,6 +460,33 @@
             </div>
           </details>
           <small>Cookie / 令牌只保存在本机项目的 gallery-dl.conf 中，不会上传。Cookie 等同于登录状态，请勿分享给他人。</small>
+        </div>
+
+        <div class="site-row">
+          <div class="site-name"><b>E-Hentai / ExHentai</b>
+            <span class="pill" :class="sites.exhentai ? 'pill-ok' : 'pill-warn'">{{ sites.exhentai ? '已填 Cookie' : '未登录' }}</span>
+          </div>
+          <div class="site-actions">
+            <button class="btn btn-small" @click="eh.open = !eh.open">{{ sites.exhentai ? '更新' : '登录' }}</button>
+            <button class="btn btn-small btn-ghost" v-if="sites.exhentai" @click="ehRemove">移除</button>
+          </div>
+        </div>
+        <div class="pixiv-flow" v-if="eh.open">
+          <div class="flow-note">表站 e-hentai.org 的图集不登录也能下载；里站 exhentai.org 必须填 Cookie，表站填了也能减少图片配额限制。</div>
+          <ol>
+            <li>在浏览器打开 <a href="https://e-hentai.org/" target="_blank" rel="noopener">e-hentai.org</a> 并登录。</li>
+            <li>按 <kbd>F12</kbd> →「<b>应用 / Application</b>」→ 左侧「<b>Cookie</b>」→ 点 <code>https://e-hentai.org</code>。</li>
+            <li>分别复制 <code>ipb_member_id</code> 和 <code>ipb_pass_hash</code> 的「值」填到下面。<code>igneous</code> 在 exhentai.org 的 Cookie 里，能进里站时才有，可留空。</li>
+          </ol>
+          <div class="eh-fields">
+            <input type="text" v-model.trim="eh.member_id" placeholder="ipb_member_id（一串数字）" autocomplete="off" spellcheck="false">
+            <input type="password" v-model.trim="eh.pass_hash" placeholder="ipb_pass_hash（32 位）" autocomplete="off">
+            <input type="password" v-model.trim="eh.igneous" placeholder="igneous（可选）" autocomplete="off">
+          </div>
+          <div class="eh-save">
+            <button class="btn btn-accent" :disabled="!eh.member_id || !eh.pass_hash || eh.busy" @click="ehSave">保存</button>
+          </div>
+          <small>Cookie 只保存在本机项目的 gallery-dl.conf 中，不会上传；它等同于登录状态，请勿分享给他人。</small>
         </div>
 
         <div class="modal-section">DeepSeek 翻译<small>保存后生效</small></div>
