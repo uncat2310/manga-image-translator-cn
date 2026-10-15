@@ -9,6 +9,7 @@
 import io
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -486,6 +487,25 @@ async def import_status(job_id: str):
     if job['dir'] and job['dir'].exists():
         downloaded = sum(1 for p in job['dir'].iterdir() if p.suffix.lower() in IMAGE_EXTS)
     return {k: job[k] for k in ('id', 'status', 'title', 'total', 'files', 'error')} | {'downloaded': downloaded}
+
+
+@router.post('/api/import/{job_id}/cleanup')
+async def import_cleanup(job_id: str, request: Request):
+    """Delete the originals a link import downloaded (called once the work is fully translated)."""
+    _check_origin(request)
+    job = _jobs.get(job_id)
+    if not job or not job.get('dir'):
+        raise HTTPException(404, detail='任务不存在或没有下载文件')
+    target = Path(job['dir']).resolve()
+    if DOWNLOAD_ROOT.resolve() not in target.parents:
+        raise HTTPException(400, detail='只能删除 downloads 文件夹里的下载内容')
+    # Another unfinished job may be downloading into the same folder (same gallery queued twice)
+    if any(j is not job and j.get('dir') and Path(j['dir']).resolve() == target and j['status'] != 'done'
+           for j in _jobs.values()):
+        return {'deleted': False}
+    shutil.rmtree(target, ignore_errors=True)
+    job['cleaned'] = True
+    return {'deleted': True}
 
 
 @router.get('/api/import/{job_id}/file/{name}')

@@ -1360,3 +1360,8 @@ details.advanced[open] > summary ~ * { animation: rise-in .3s var(--ease-out) bo
 .eh-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .eh-fields input:last-child { grid-column: 1 / -1; }
 .eh-save { display: flex; justify-content: flex-end; }
+
+.check-row { align-items: flex-start; margin: -2px 0 14px; }
+.check-row input { margin-top: 3px; flex: none; }
+.check-row span { display: flex; flex-direction: column; gap: 2px; font-weight: 600; }
+.check-row small { font-weight: 400; color: var(--muted); font-size: 12px; line-height: 1.5; }

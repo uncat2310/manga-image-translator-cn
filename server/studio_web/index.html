@@ -418,6 +418,12 @@
           </div>
           <small>每部作品会在这里新建一个以作品名称命名的子文件夹。</small>
         </div>
+        <label class="check check-row">
+          <input type="checkbox" v-model="options.deleteDownloads">
+          <span>翻译成功后自动删除下载的原图
+            <small>只删除通过链接下载、存放在 downloads 文件夹里的原图；有页面失败时保留，翻译结果不受影响。</small>
+          </span>
+        </label>
 
         <div class="modal-section">网站账号<small>用于下载需要登录的网站</small></div>
         <div class="site-row">

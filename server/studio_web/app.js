@@ -33,6 +33,7 @@ const QUALITY = {
 const DEFAULT_OPTIONS = {
   translator: 'deepseek', targetLang: 'CHS', direction: 'auto', quality: 'standard',
   fontOffset: 0, inpainter: 'lama_large', ocr: '48px', noBorder: false, autoTranslate: true, thumb: 'm',
+  deleteDownloads: true,
 };
 
 function loadOptions() {
@@ -268,7 +269,8 @@ createApp({
         const b = await fetch(`/studio/api/import/${data.id}/file/${encodeURIComponent(name)}`).then((x) => x.blob());
         files.push(new File([b], name, { type: b.type }));
       }
-      addFiles(files, '', info.title || todayName());
+      const added = addFiles(files, '', info.title || todayName());
+      if (added) pages.slice(-added).forEach((p) => { p.importId = data.id; });
       job.status = 'done';
       setTimeout(() => { const k = imports.indexOf(job); if (k >= 0 && job.status === 'done') imports.splice(k, 1); }, 4000);
       if (options.autoTranslate) {
@@ -376,7 +378,10 @@ createApp({
             doneFolders.push(p.folder);
             const failed = pages.filter((x) => x.folder === p.folder && x.status === 'error').length;
             if (failed) toast(`「${p.folder}」完成，但有 ${failed} 页失败`, 'error', 5000);
-            else toast(`「${p.folder}」翻译完成`, 'ok', 4000);
+            else {
+              toast(`「${p.folder}」翻译完成`, 'ok', 4000);
+              if (options.deleteDownloads) cleanupDownloads(p.folder);
+            }
           }
         }
       } finally {
@@ -393,6 +398,21 @@ createApp({
         }
         stopping.value = false;
       }
+    }
+
+    // Only after every page of the work is translated and saved; failed pages keep their originals.
+    async function cleanupDownloads(folder) {
+      const own = pages.filter((x) => x.folder === folder);
+      if (!own.length || own.some((x) => x.status !== 'done' && x.status !== 'skipped')) return;
+      const ids = [...new Set(own.map((x) => x.importId).filter(Boolean))];
+      let deleted = 0;
+      for (const id of ids) {
+        try {
+          const r = await fetch(`/studio/api/import/${id}/cleanup`, { method: 'POST' });
+          if (r.ok && (await r.json()).deleted) deleted++;
+        } catch {}
+      }
+      if (deleted) toast(`已删除「${folder}」下载的原图`);
     }
 
     function stop() {
