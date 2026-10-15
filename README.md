@@ -5,7 +5,7 @@
 **针对中文（简体/繁体）场景深度优化的全自动漫画翻译、自适应嵌字与图集分发引擎**
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
-[![Python Version](https://img.shields.io/badge/Python-3.10%2B-brightgreen.svg)](https://www.python.org/)
+[![Python Version](https://img.shields.io/badge/Python-3.12%2B-brightgreen.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ed.svg)](https://www.docker.com/)
 [![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GHCR%20Automated-success.svg)](https://github.com/uncat2310/manga-image-translator-cn/actions)
 
@@ -37,59 +37,92 @@
 
 ## 🚀 快速开始
 
-### 方式一：Docker 一键拉取运行（推荐）
+### 方式一：Docker 一键拉取运行
 
 ```bash
 docker run -d \
   --name manga-translator \
   --restart unless-stopped \
   -p 5003:5003 \
+  --env-file .env \
   -v $(pwd)/models:/app/models \
-  -v $(pwd)/config.json:/app/config.json \
-  ghcr.io/uncat2310/manga-image-translator-cn:latest
+  --entrypoint python \
+  ghcr.io/uncat2310/manga-image-translator-cn:latest \
+  server/main.py --start-instance --host=0.0.0.0 --port=5003
 ```
 
 ---
 
 ### 方式二：源码本地运行
 
+需要 **Python 3.12+**。Windows 用户请先安装 [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)（勾选“使用 C++ 的桌面开发”），`pydensecrf` 需要编译。
+
 #### 1. 克隆仓库并安装依赖
+
 ```bash
 git clone https://github.com/uncat2310/manga-image-translator-cn.git
 cd manga-image-translator-cn
 
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
+
+# 按硬件选一个：
+pip install -r requirements.txt       # NVIDIA GPU / CPU
+pip install -r requirements-xpu.txt   # Intel Arc 独显/核显（XPU）
+pip install -r requirements-rocm.txt  # AMD GPU (ROCm)
 ```
 
-#### 2. 单张/批量漫画翻译
-```bash
-# 本地翻译并保存为图片
-python -m manga_translator -v --config-file config.json -i input.jpg -o output.jpg
+#### 2. 配置 API Key
 
-# 自动生成 Telegraph 图集
-python publish.py --mode telegraph --title "漫画第1话" /path/to/translated_images/
+在项目根目录创建 `.env`：
+
+```env
+DEEPSEEK_API_KEY=sk-xxxxxxxx
+# 可选
+DEEPSEEK_API_BASE=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+再复制配置模板：`cp config-example.json config.json`（Windows: `copy config-example.json config.json`）。
+
+#### 3. 单张/批量漫画翻译
+
+```bash
+# 翻译 input/ 目录下的图片，结果写入 output/（有 GPU 时加 --use-gpu，支持 CUDA / Intel XPU / Apple MPS）
+python -m manga_translator -v local --config-file config.json -i input/ -o output/
+
+# 指定中文字体（可选，默认使用 fonts/msyh.ttc）
+python -m manga_translator --font-path fonts/msyh.ttc local --config-file config.json -i input/ -o output/
+
+# 生成 Telegraph 图集
+python publish.py --mode telegraph --title "漫画第1话" output/
 ```
 
 ---
 
-## ⚙️ 配置文件示例 (`config.json`)
+## ⚙️ 配置文件
+
+### `config.json`（翻译流程）
+
+完整模板见 [`config-example.json`](config-example.json)，字段说明可运行 `python -m manga_translator config-help`。关键部分：
 
 ```json
 {
-  "translator": "deepseek",
-  "deepseek": {
-    "api_key": "YOUR_DEEPSEEK_API_KEY",
-    "model": "deepseek-chat"
+  "translator": {
+    "translator": "deepseek",
+    "target_lang": "CHS"
   },
-  "target_lang": "CHS",
-  "font_path": "fonts/SourceHanSansCN-Bold.otf",
-  "telegraph": {
-    "access_token": "YOUR_TELEGRAPH_TOKEN"
-  }
+  "detector": { "detector": "default", "detection_size": 2048 },
+  "ocr": { "ocr": "48px" },
+  "inpainter": { "inpainter": "lama_large", "inpainting_size": 2048 }
 }
 ```
+
+> API Key 只从 `.env` / 环境变量读取，不要写进 `config.json`；字体通过命令行 `--font-path` 指定。
+
+### `publish_config.json`（发布）
+
+复制 [`publish_config.example.json`](publish_config.example.json) 为 `publish_config.json`。Telegraph 模式首次运行会自动注册并写入 `access_token`。
 
 ---
 

@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.12", "3.13"]
       fail-fast: false
     steps:
     - uses: actions/checkout@v3
@@ -36,14 +36,6 @@ jobs:
       run: |
         python3 -mvenv venv
         venv/bin/pip install -r requirements.txt -r requirements-dev.txt
-    - name: Download fonts
-      # fonts/ is git-ignored (fetched separately by users); the render test needs the fallback fonts.
-      # Pinned to an upstream commit for reproducibility.
-      run: |
-        mkdir -p fonts
-        for f in Arial-Unicode-Regular.ttf msyh.ttc msgothic.ttc; do
-          curl -fsSL --retry 3 -o "fonts/$f" "https://raw.githubusercontent.com/zyddnys/manga-image-translator/441d07c59a735c7db3db2e7bb8b07920afd8a9cc/fonts/$f"
-        done
     - name: Test
       # test_online_translators scrapes live third-party web services (e.g. papago.naver.com)
       # and breaks whenever they change; it needs network/API keys, so skip it in CI.

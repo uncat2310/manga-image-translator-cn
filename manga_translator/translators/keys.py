@@ -12,7 +12,8 @@ YOUDAO_SECRET_KEY = os.getenv('YOUDAO_SECRET_KEY', '') # 应用秘钥
 DEEPL_AUTH_KEY = os.getenv('DEEPL_AUTH_KEY', '') #YOUR_AUTH_KEY
 # openai
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'chatgpt-4o-latest')
+# ChatGPT uses one model; custom models belong in CUSTOM_OPENAI_MODEL.
+OPENAI_MODEL = 'gpt-6-luna'
 
 GROQ_API_KEY = os.getenv('GROQ_API_KEY', '')
 GROQ_MODEL = os.getenv('GROQ_MODEL', 'mixtral-8x7b-32768')
@@ -37,6 +38,11 @@ GEMINI_MODEL = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash-002')
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', '')
 DEEPSEEK_API_BASE  = os.getenv('DEEPSEEK_API_BASE', 'https://api.deepseek.com')
 DEEPSEEK_MODEL  = os.getenv('DEEPSEEK_MODEL', 'deepseek-chat') # Or: "deepseek-reasoner"
+
+# Atlas Cloud, an OpenAI-compatible gateway
+ATLASCLOUD_API_KEY = os.getenv('ATLASCLOUD_API_KEY', '')
+ATLASCLOUD_API_BASE = os.getenv('ATLASCLOUD_API_BASE', 'https://api.atlascloud.ai/v1')
+ATLASCLOUD_MODEL = os.getenv('ATLASCLOUD_MODEL', 'deepseek-ai/deepseek-v4-flash')  # Full list: https://api.atlascloud.ai/v1/models
 
 # Together AI
 TOGETHER_API_KEY = os.getenv('TOGETHER_API_KEY', '')

@@ -22,7 +22,9 @@ def _get_cjk_font(font_size: int = 30) -> ImageFont.FreeTypeFont:
     """Get a CJK font, with fallback chain."""
     font_candidates = [
         os.path.join(BASE_PATH, 'fonts', 'NotoSansSC-Regular.ttf'),
+        os.path.join(BASE_PATH, 'fonts', 'msyh.ttc'),
         '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',
+        'C:/Windows/Fonts/msyh.ttc',
         os.path.join(BASE_PATH, 'fonts', 'NotoSansMonoCJK-VF.ttf.ttc'),
     ]
     for fp in font_candidates:
