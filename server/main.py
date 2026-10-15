@@ -31,13 +31,30 @@ BASE_DIR = Path(__file__).resolve().parent
 RESULT_ROOT = (BASE_DIR.parent / "result").resolve()
 RESULT_ROOT.mkdir(parents=True, exist_ok=True)
 
+# MT_ALLOWED_ORIGINS (comma-separated) restricts which web pages may call this server.
+# The studio launcher sets it to the studio's own origin so other websites open in the
+# same browser cannot use the local translator (and the user's API quota). Unset keeps
+# the upstream behaviour of allowing any origin (e.g. for userscripts).
+_allowed_origins = [o.strip() for o in os.getenv('MT_ALLOWED_ORIGINS', '').split(',') if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+if _allowed_origins:
+    from fastapi.responses import JSONResponse
+
+    @app.middleware("http")
+    async def reject_foreign_origins(request: Request, call_next):
+        # CORS only hides responses; a cross-site form POST would still run, so refuse it here.
+        origin = request.headers.get("origin")
+        if origin and origin not in _allowed_origins:
+            return JSONResponse({"detail": "Forbidden origin"}, status_code=403)
+        return await call_next(request)
 
 studio.mount(app)
 

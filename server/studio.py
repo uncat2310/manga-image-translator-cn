@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import urlparse
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -31,7 +31,7 @@ ENV_FILE = ROOT / '.env'
 DEEPSEEK_MODELS = ['deepseek-flash', 'deepseek-v4-pro']
 IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.webp', '.bmp'}
 
-router = APIRouter(prefix='/studio', tags=['studio'])
+router = APIRouter(prefix='/studio', tags=['studio'])  # origin check added below, once defined
 
 
 class Engine:
@@ -84,6 +84,10 @@ def _check_origin(request: Request):
     origin = request.headers.get('origin')
     if origin and urlparse(origin).hostname not in ('127.0.0.1', 'localhost', '::1'):
         raise HTTPException(403, detail='Forbidden origin')
+
+
+# Every studio API (reads included) only answers the studio page itself
+router.dependencies.append(Depends(_check_origin))
 
 
 def _safe_name(name: str, fallback: str) -> str:

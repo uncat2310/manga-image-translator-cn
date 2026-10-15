@@ -151,6 +151,7 @@ createApp({
     const eh = reactive({ open: false, member_id: '', pass_hash: '', igneous: '', busy: false });
     const pixiv = reactive({ open: false, step: 1, code: '', token: '', cookie: '', busy: false });
     let abort = null, nextId = 1, statusTimer = null, startedAt = 0, finishedInRun = 0, importBusy = false;
+    let pausedByUser = false;  // set by Stop; downloads finishing later must not restart translation
 
     watch(options, (v) => { try { localStorage.setItem(STORE_KEY, JSON.stringify(v)); } catch {} }, { deep: true });
 
@@ -272,7 +273,7 @@ createApp({
       setTimeout(() => { const k = imports.indexOf(job); if (k >= 0 && job.status === 'done') imports.splice(k, 1); }, 4000);
       if (options.autoTranslate) {
         if (!status.engine_ready) toast('翻译引擎还在启动，就绪后点「开始翻译」即可', 'info', 5000);
-        else start(false);
+        else start(false, false);
       }
     }
 
@@ -357,7 +358,9 @@ createApp({
     }
 
     // Keeps taking the next queued page, so pages added during a run (drops, links, retries) are picked up too.
-    async function start(retryErrors = true) {
+    async function start(retryErrors = true, manual = true) {
+      if (manual) pausedByUser = false;
+      else if (pausedByUser) return;
       if (running.value) return;
       if (options.translator === 'deepseek' && !status.deepseek_key_set) { openSettings(); return; }
       if (retryErrors) pages.forEach((p) => { if (p.status === 'error') { p.status = 'queued'; p.error = ''; p.progress = 0; } });
@@ -393,6 +396,7 @@ createApp({
     }
 
     function stop() {
+      pausedByUser = true;
       stopping.value = true;
       if (abort) abort.abort();
     }
@@ -400,7 +404,7 @@ createApp({
     function retry(i) {
       const p = pages[i];
       p.status = 'queued'; p.progress = 0; p.error = '';
-      start(false);
+      start(false, true);
     }
 
     /* ---------- 文件夹 ---------- */

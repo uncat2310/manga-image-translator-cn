@@ -102,7 +102,8 @@ def main():
     if gpu:
         cmd.append('--use-gpu')
 
-    env = dict(os.environ, PYTHONIOENCODING='utf-8')
+    env = dict(os.environ, PYTHONIOENCODING='utf-8',
+               MT_ALLOWED_ORIGINS=f'http://127.0.0.1:{args.port},http://localhost:{args.port}')
     server = subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     threading.Thread(target=forward_output, args=(server.stdout,), daemon=True).start()
     print('[1/2] 正在启动网页服务…')
