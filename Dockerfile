@@ -1,5 +1,9 @@
 FROM pytorch/pytorch:2.14.1-cuda12.6-cudnn9-runtime
 
+# The base image\'s Python is marked externally managed (PEP 668); this container is the
+# isolated environment, so let pip install into it.
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
 WORKDIR /app
 
 # Install pip dependencies
@@ -9,7 +13,7 @@ COPY requirements.txt /app/requirements.txt
 RUN export TZ=Etc/UTC \
         && apt update --yes \
         && apt install g++ git ffmpeg libsm6 libxext6 gimp libvulkan1 --yes \
-        && pip install -r /app/requirements.txt \
+        && pip install --no-cache-dir -r /app/requirements.txt \
         && apt remove g++ git --yes \
         && apt autoremove --yes \
         && rm -rf /var/cache/apt
