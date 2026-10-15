@@ -11,7 +11,7 @@ import time
 from typing import List
 from .common import MissingAPIKeyException
 from .common_gpt import CommonGPTTranslator
-from .keys import DEEPSEEK_API_KEY, DEEPSEEK_API_BASE, DEEPSEEK_MODEL
+from .keys import DEEPSEEK_API_KEY, DEEPSEEK_API_BASE, DEEPSEEK_MODEL, DEEPSEEK_THINKING
 from .tokenizers.token_counters import deepseekTokenCounter
 
 
@@ -258,6 +258,7 @@ class DeepseekTranslator(CommonGPTTranslator):
             
             'temperature': self.temperature,
             'top_p': self.top_p,
+            'extra_body': {'thinking': {'type': DEEPSEEK_THINKING}},
         }
         try:
             response = await self.client.beta.chat.completions.parse(**kwargs)
